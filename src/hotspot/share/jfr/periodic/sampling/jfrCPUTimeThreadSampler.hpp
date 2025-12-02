@@ -130,6 +130,8 @@ class JfrCPUTimeThreadSampling : public JfrCHeapObj {
   static void send_lost_event(const JfrTicks& time, traceid tid, s4 lost_samples);
 
   static void trigger_async_processing_of_cpu_time_jfr_requests();
+
+  DEBUG_ONLY(static bool set_out_of_stack_walking_enabled(bool runnable);)
 };
 
 #else
@@ -150,6 +152,7 @@ private:
 
   static void on_javathread_create(JavaThread* thread);
   static void on_javathread_terminate(JavaThread* thread);
+  DEBUG_ONLY(static bool set_out_of_stack_walking_enabled(bool runnable));
 };
 
 #endif // defined(LINUX)
