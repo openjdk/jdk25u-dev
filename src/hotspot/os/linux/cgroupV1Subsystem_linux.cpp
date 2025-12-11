@@ -123,6 +123,12 @@ void CgroupV1Controller::set_subsystem_path(const char* cgroup_path) {
   }
 }
 
+jlong CgroupV1MemoryController::uses_mem_hierarchy() {
+  julong use_hierarchy;
+  CONTAINER_READ_NUMBER_CHECKED(reader(), "/memory.use_hierarchy", "Use Hierarchy", use_hierarchy);
+  return (jlong)use_hierarchy;
+}
+
 /*
  * The common case, containers, we have _root == _cgroup_path, and thus set the
  * controller path to the _mount_point. This is where the limits are exposed in
@@ -160,8 +166,13 @@ jlong CgroupV1MemoryController::read_memory_limit_in_bytes(julong phys_mem) {
   julong memlimit;
   CONTAINER_READ_NUMBER_CHECKED(reader(), "/memory.limit_in_bytes", "Memory Limit", memlimit);
   if (memlimit >= phys_mem) {
+    if (uses_mem_hierarchy()) {
+      CONTAINER_READ_NUMERICAL_KEY_VALUE_CHECKED(reader(), "/memory.stat",
+                                                 "hierarchical_memory_limit", "Hierarchical Memory Limit",
+                                                 memlimit);
+    }
     verbose_log(memlimit, phys_mem);
-    return (jlong)-1;
+    return (jlong)((memlimit < phys_mem) ? memlimit : -1);
   } else {
     verbose_log(memlimit, phys_mem);
     return (jlong)memlimit;
@@ -184,6 +195,15 @@ jlong CgroupV1MemoryController::read_mem_swap(julong host_total_memsw) {
   julong memswlimit;
   CONTAINER_READ_NUMBER_CHECKED(reader(), "/memory.memsw.limit_in_bytes", "Memory and Swap Limit", memswlimit);
   if (memswlimit >= host_total_memsw) {
+    if (uses_mem_hierarchy()) {
+      CONTAINER_READ_NUMERICAL_KEY_VALUE_CHECKED(reader(), "/memory.stat",
+                                                 "hierarchical_memsw_limit", "Hierarchical Memory and Swap Limit",
+                                                 memswlimit);
+      if (memswlimit < host_total_memsw) {
+        log_trace(os, container)("Memory and Swap Limit is: " JULONG_FORMAT, memswlimit);
+        return (jlong)memswlimit;
+      } // fall through to unlimited
+    }
     log_trace(os, container)("Memory and Swap Limit is: Unlimited");
     return (jlong)-1;
   } else {
