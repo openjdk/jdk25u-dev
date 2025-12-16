@@ -165,18 +165,13 @@ void verbose_log(julong read_mem_limit, julong host_mem) {
 jlong CgroupV1MemoryController::read_memory_limit_in_bytes(julong phys_mem) {
   julong memlimit;
   CONTAINER_READ_NUMBER_CHECKED(reader(), "/memory.limit_in_bytes", "Memory Limit", memlimit);
-  if (memlimit >= phys_mem) {
-    if (uses_mem_hierarchy()) {
-      CONTAINER_READ_NUMERICAL_KEY_VALUE_CHECKED(reader(), "/memory.stat",
-                                                 "hierarchical_memory_limit", "Hierarchical Memory Limit",
-                                                 memlimit);
-    }
-    verbose_log(memlimit, phys_mem);
-    return (jlong)((memlimit < phys_mem) ? memlimit : -1);
-  } else {
-    verbose_log(memlimit, phys_mem);
-    return (jlong)memlimit;
+  if (memlimit >= phys_mem && uses_mem_hierarchy()) {
+    CONTAINER_READ_NUMERICAL_KEY_VALUE_CHECKED(reader(), "/memory.stat",
+                                               "hierarchical_memory_limit", "Hierarchical Memory Limit",
+                                               memlimit);
   }
+  verbose_log(memlimit, phys_mem);
+  return (jlong)((memlimit < phys_mem) ? memlimit : -1);
 }
 
 /* read_mem_swap
@@ -194,21 +189,13 @@ jlong CgroupV1MemoryController::read_memory_limit_in_bytes(julong phys_mem) {
 jlong CgroupV1MemoryController::read_mem_swap(julong host_total_memsw) {
   julong memswlimit;
   CONTAINER_READ_NUMBER_CHECKED(reader(), "/memory.memsw.limit_in_bytes", "Memory and Swap Limit", memswlimit);
-  if (memswlimit >= host_total_memsw) {
-    if (uses_mem_hierarchy()) {
-      CONTAINER_READ_NUMERICAL_KEY_VALUE_CHECKED(reader(), "/memory.stat",
-                                                 "hierarchical_memsw_limit", "Hierarchical Memory and Swap Limit",
-                                                 memswlimit);
-      if (memswlimit < host_total_memsw) {
-        log_trace(os, container)("Memory and Swap Limit is: " JULONG_FORMAT, memswlimit);
-        return (jlong)memswlimit;
-      } // fall through to unlimited
-    }
-    log_trace(os, container)("Memory and Swap Limit is: Unlimited");
-    return (jlong)-1;
-  } else {
-    return (jlong)memswlimit;
+  if (memswlimit >= host_total_memsw && uses_mem_hierarchy()) {
+    CONTAINER_READ_NUMERICAL_KEY_VALUE_CHECKED(reader(), "/memory.stat",
+                                               "hierarchical_memsw_limit", "Hierarchical Memory and Swap Limit",
+                                               memswlimit);
   }
+  verbose_log(memswlimit, host_total_memsw);
+  return (jlong)((memswlimit < host_total_memsw) ? memswlimit : -1);
 }
 
 jlong CgroupV1MemoryController::memory_and_swap_limit_in_bytes(julong host_mem, julong host_swap) {
