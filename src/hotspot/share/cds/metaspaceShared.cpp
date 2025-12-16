@@ -571,7 +571,7 @@ private:
 public:
 
   VM_PopulateDumpSharedSpace(StaticArchiveBuilder& b, FileMapInfo* map_info) :
-    VM_Operation(), _map_info(map_info), _builder(b) {}
+    VM_Operation(), _heap_info(), _map_info(map_info), _builder(b) {}
 
   bool skip_operation() const { return false; }
 
