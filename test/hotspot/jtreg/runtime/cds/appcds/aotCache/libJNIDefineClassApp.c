@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,32 +21,16 @@
  * questions.
  */
 
-package compiler.lib.generators;
+#include <jni.h>
 
-/**
- * Provides a uniform float distribution random generator, in the provided range [lo, hi).
- */
-final class UniformFloatGenerator extends UniformIntersectionRestrictableGenerator<Float> {
-    /**
-     * Creates a new {@link UniformFloatGenerator}.
-     *
-     * @param lo Lower bound of the range (inclusive).
-     * @param hi Higher bound of the range (exclusive).
-     */
-    public UniformFloatGenerator(Generators g, float lo, float hi) {
-        super(g, lo, hi);
-        if (Float.compare(lo, hi) >= 0) {
-            throw new EmptyGeneratorException();
-        }
-    }
-
-    @Override
-    public Float next() {
-        return g.random.nextFloat(lo(), hi());
-    }
-
-    @Override
-    protected RestrictableGenerator<Float> doRestrictionFromIntersection(Float lo, Float hi) {
-        return new UniformFloatGenerator(g, lo, hi);
-    }
+JNIEXPORT jclass JNICALL
+Java_JNIDefineClassApp_nativeDefineClass(JNIEnv* env, jclass clazz /*unused*/,
+                                         jstring className, jobject classLoader, jbyteArray bytecode) {
+    const char* classNameChar = (*env)->GetStringUTFChars(env, className, NULL);
+    jbyte* arrayContent = (*env)->GetByteArrayElements(env, bytecode, NULL);
+    jsize bytecodeLength = (*env)->GetArrayLength(env, bytecode);
+    jclass returnValue = (*env)->DefineClass(env, classNameChar, classLoader, arrayContent, bytecodeLength);
+    (*env)->ReleaseByteArrayElements(env, bytecode, arrayContent, JNI_ABORT);
+    (*env)->ReleaseStringUTFChars(env, className, classNameChar);
+    return returnValue;
 }
