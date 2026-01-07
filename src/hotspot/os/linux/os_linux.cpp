@@ -2468,6 +2468,7 @@ void os::Linux::print_uptime_info(outputStream* st) {
   if (ret == 0) {
     os::print_dhm(st, "OS uptime:", (long) sinfo.uptime);
   }
+  assert(ret == 0, "sysinfo failed: %s", os::strerror(errno));
 }
 
 bool os::Linux::print_container_info(outputStream* st) {
@@ -2581,16 +2582,18 @@ void os::print_memory_info(outputStream* st) {
 
   // values in struct sysinfo are "unsigned long"
   struct sysinfo si;
-  sysinfo(&si);
-
+  int ret = sysinfo(&si);
+  assert(ret == 0, "sysinfo failed: %s", os::strerror(errno));
   st->print(", physical " UINT64_FORMAT "k",
             os::physical_memory() >> 10);
   st->print("(" UINT64_FORMAT "k free)",
             os::available_memory() >> 10);
-  st->print(", swap " UINT64_FORMAT "k",
-            ((jlong)si.totalswap * si.mem_unit) >> 10);
-  st->print("(" UINT64_FORMAT "k free)",
-            ((jlong)si.freeswap * si.mem_unit) >> 10);
+  if (ret == 0) {
+    st->print(", swap " UINT64_FORMAT "k",
+              ((jlong)si.totalswap * si.mem_unit) >> 10);
+    st->print("(" UINT64_FORMAT "k free)",
+              ((jlong)si.freeswap * si.mem_unit) >> 10);
+  }
   st->cr();
   st->print("Page Sizes: ");
   _page_sizes.print_on(st);
@@ -5255,7 +5258,7 @@ int os::get_core_path(char* buffer, size_t bufferSize) {
 
     if (core_pattern[0] == '|') {
       written = jio_snprintf(buffer, bufferSize,
-                             "\"%s\" (or dumping to %s/core.%d)",
+                             "\"%s\" (alternatively, falling back to %s/core.%d)",
                              &core_pattern[1], p, current_process_id());
     } else if (pid_pos != nullptr) {
       *pid_pos = '\0';
