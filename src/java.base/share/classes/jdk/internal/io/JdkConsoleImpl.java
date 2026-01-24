@@ -128,8 +128,8 @@ public final class JdkConsoleImpl implements JdkConsole {
             return SharedSecrets.getJavaIOAccess().isStdinTty() ?
                 Optional.of(
                     new JdkConsoleImpl(
-                        Charset.forName(StaticProperty.stdinEncoding(), UTF_8.INSTANCE),
-                        Charset.forName(StaticProperty.stdoutEncoding(), UTF_8.INSTANCE))) :
+                        UTF_8.INSTANCE,
+                        UTF_8.INSTANCE)) :
                 Optional.empty();
         });
     }

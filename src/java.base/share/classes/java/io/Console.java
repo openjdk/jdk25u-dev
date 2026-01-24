@@ -546,7 +546,7 @@ public sealed class Console implements Flushable permits ProxyingConsole {
      * @since 22
      */
     public boolean isTerminal() {
-        return istty;
+        return isStdinTty() && isStdoutTty();
     }
 
     private static UnsupportedOperationException newUnsupportedOperationException() {
