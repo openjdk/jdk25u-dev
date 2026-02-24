@@ -103,13 +103,13 @@ import org.junit.jupiter.api.extension.TestWatcher;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class AbstractThrowingPushPromises implements HttpServerAdapters {
 
-    SSLContext sslContext;
-    HttpTestServer http2TestServer;   // HTTP/2 ( h2c )
-    HttpTestServer https2TestServer;  // HTTP/2 ( h2  )
-    String http2URI_fixed;
-    String http2URI_chunk;
-    String https2URI_fixed;
-    String https2URI_chunk;
+    static SSLContext sslContext;
+    static HttpTestServer http2TestServer;   // HTTP/2 ( h2c )
+    static HttpTestServer https2TestServer;  // HTTP/2 ( h2  )
+    static String http2URI_fixed;
+    static String http2URI_chunk;
+    static String https2URI_fixed;
+    static String https2URI_chunk;
 
     static final int ITERATION_COUNT = 1;
     // a shared executor helps reduce the amount of threads created by the test
