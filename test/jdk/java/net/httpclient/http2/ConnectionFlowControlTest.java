@@ -27,7 +27,7 @@
  * @summary checks connection flow control
  * @library /test/lib /test/jdk/java/net/httpclient/lib
  * @build jdk.httpclient.test.lib.http2.Http2TestServer jdk.test.lib.net.SimpleSSLContext
- * @run testng/othervm  -Djdk.internal.httpclient.debug=true
+ * @run testng/othervm  -Djdk.internal.httpclient.debug=err
  *                      -Djdk.httpclient.connectionWindowSize=65535
  *                      -Djdk.httpclient.windowsize=16384
  *                      ConnectionFlowControlTest
@@ -142,7 +142,7 @@ public class ConnectionFlowControlTest {
                     final HttpClient cc = client;
                     var response = cc.send(request, BodyHandlers.ofInputStream());
                     responses.put(query, response);
-                    String ckey = response.headers().firstValue("X-Connection-Key").get();
+                    String ckey = response.connectionLabel().get();
                     if (label == null) label = ckey;
                     try {
                         if (i < max - 1) {
@@ -169,7 +169,7 @@ public class ConnectionFlowControlTest {
                     try {
                         String query = keys[i];
                         var response = responses.get(keys[i]);
-                        String ckey = response.headers().firstValue("X-Connection-Key").get();
+                        String ckey = response.connectionLabel().get();
                         if (label == null) label = ckey;
                         if (i < max - 1) {
                             // the connection window might be exceeded at i == max - 2, which
@@ -226,7 +226,7 @@ public class ConnectionFlowControlTest {
             System.out.println("\nSending last request:" + uriWithQuery);
             var response = client.send(request, BodyHandlers.ofString());
             if (label != null) {
-                String ckey = response.headers().firstValue("X-Connection-Key").get();
+                String ckey = response.connectionLabel().get();
                 assertNotEquals(ckey, label);
                 System.out.printf("last request %s sent on different connection as expected:" +
                         "\n\tlast: %s\n\tprevious: %s%n", query, ckey, label);
@@ -301,7 +301,6 @@ public class ConnectionFlowControlTest {
                 byte[] bytes = is.readAllBytes();
                 System.out.println("Server " + t.getLocalAddress() + " received:\n"
                         + t.getRequestURI() + ": " + new String(bytes, StandardCharsets.UTF_8));
-                t.getResponseHeaders().setHeader("X-Connection-Key", t.getConnectionKey());
 
                 if (bytes.length == 0) bytes = "no request body!".getBytes(StandardCharsets.UTF_8);
                 int window = Math.max(16384, Integer.getInteger("jdk.httpclient.windowsize", 2*16*1024));
