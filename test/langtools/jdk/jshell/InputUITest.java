@@ -52,6 +52,7 @@ public class InputUITest extends UITesting {
         super(true);
     }
 
+    @Test
     public void testUserInputWithSurrogates() throws Exception {
         Function<Integer, String> genSnippet =
                 realCharsToRead -> "new String(System.in.readNBytes(" +

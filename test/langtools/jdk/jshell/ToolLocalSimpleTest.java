@@ -51,12 +51,12 @@ public class ToolLocalSimpleTest extends ToolSimpleTest {
     @Test
     public void verifyLocal() {
         System.setProperty("LOCAL_CHECK", "Here");
-        assertEquals(System.getProperty("LOCAL_CHECK"), "Here");
+        assertEquals("Here", System.getProperty("LOCAL_CHECK"));
         test(new String[]{"--no-startup"},
                 a -> assertCommand(a, "System.getProperty(\"LOCAL_CHECK\")", "$1 ==> \"Here\""),
                 a -> assertCommand(a, "System.setProperty(\"LOCAL_CHECK\", \"After\")", "$2 ==> \"Here\"")
         );
-        assertEquals(System.getProperty("LOCAL_CHECK"), "After");
+        assertEquals("After", System.getProperty("LOCAL_CHECK"));
     }
 
     @Override
