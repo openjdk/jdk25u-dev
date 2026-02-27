@@ -30,12 +30,12 @@
  *          jdk.jdeps/com.sun.tools.javap
  *          jdk.jshell/jdk.internal.jshell.tool
  * @build KullaTesting TestingInputStream ToolSimpleTest
- * @run testng/othervm ToolLocalSimpleTest
+ * @run junit/othervm ToolLocalSimpleTest
  */
 
 import java.util.Locale;
-import org.testng.annotations.Test;
-import static org.testng.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.junit.jupiter.api.Test;
 
 public class ToolLocalSimpleTest extends ToolSimpleTest {
 
