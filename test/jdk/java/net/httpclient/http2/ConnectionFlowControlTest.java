@@ -27,7 +27,7 @@
  * @summary checks connection flow control
  * @library /test/lib /test/jdk/java/net/httpclient/lib
  * @build jdk.httpclient.test.lib.http2.Http2TestServer jdk.test.lib.net.SimpleSSLContext
- * @run testng/othervm  -Djdk.internal.httpclient.debug=err
+ * @run junit/othervm   -Djdk.internal.httpclient.debug=err
  *                      -Djdk.httpclient.connectionWindowSize=65535
  *                      -Djdk.httpclient.windowsize=16384
  *                      ConnectionFlowControlTest
@@ -207,7 +207,7 @@ public class ConnectionFlowControlTest {
             var response = client.send(request, BodyHandlers.ofString());
             if (label != null) {
                 String ckey = response.connectionLabel().get();
-                assertNotEquals(ckey, label);
+                assertNotEquals(label, ckey);
                 System.out.printf("last request %s sent on different connection as expected:" +
                         "\n\tlast: %s\n\tprevious: %s%n", query, ckey, label);
             }
