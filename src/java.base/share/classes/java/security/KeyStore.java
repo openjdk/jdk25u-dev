@@ -845,7 +845,7 @@ public class KeyStore {
      * The JDK Reference Implementation additionally uses the
      * {@code jdk.security.provider.preferred}
      * {@link Security#getProperty(String) Security} property to determine
-     * the preferred provider order for the specified algorithm. This
+     * the preferred provider order for the specified keystore type. This
      * may be different from the order of providers returned by
      * {@link Security#getProviders() Security.getProviders()}.
      *
