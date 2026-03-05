@@ -55,13 +55,11 @@ import com.sun.net.httpserver.HttpsServer;
 import jdk.test.lib.net.SimpleSSLContext;
 import jdk.test.lib.net.URIBuilder;
 
-import static com.sun.net.httpserver.HttpExchange.RSPBODY_EMPTY;
-
-
 public class GetServerCertificates {
 
     static final String URI_PATH = "/GetServerCertificates/";
     static final String BODY = "Go raibh maith agat";
+    static final long RSPBODY_EMPTY = -1l;
     enum TESTS {
         HEAD("head", 200, "HEAD"),
         NOBODY("nobody", 200, "GET", "POST"),
