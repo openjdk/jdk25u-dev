@@ -55,10 +55,17 @@ import com.sun.net.httpserver.HttpsServer;
 import jdk.test.lib.net.SimpleSSLContext;
 import jdk.test.lib.net.URIBuilder;
 
+// Use of the static import (RSPBODY_EMPTY) depends on JDK-8331195,
+// which requires a CSR approval before backporting.
+// import static com.sun.net.httpserver.HttpExchange.RSPBODY_EMPTY;
+
+
 public class GetServerCertificates {
 
     static final String URI_PATH = "/GetServerCertificates/";
     static final String BODY = "Go raibh maith agat";
+    // Using constant (RSPBODY_EMPTY) instead of a static import that depends
+    // on JDK-8331195, which requires a CSR approval before backporting.
     static final long RSPBODY_EMPTY = -1l;
     enum TESTS {
         HEAD("head", 200, "HEAD"),
