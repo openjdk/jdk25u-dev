@@ -182,7 +182,7 @@ void ShenandoahGeneration::log_status(const char *msg) const {
   // byte size in proper unit and proper unit for byte size are consistent.
   const size_t v_used = used();
   const size_t v_used_regions = used_regions_size();
-  const size_t v_soft_max_capacity = soft_max_capacity();
+  const size_t v_soft_max_capacity = ShenandoahHeap::heap()->soft_max_capacity();
   const size_t v_max_capacity = max_capacity();
   const size_t v_available = available();
   const size_t v_humongous_waste = get_humongous_waste();
@@ -535,6 +535,8 @@ size_t ShenandoahGeneration::select_aged_regions(size_t old_available) {
 
   const size_t old_garbage_threshold = (ShenandoahHeapRegion::region_size_bytes() * ShenandoahOldGarbageThreshold) / 100;
 
+  const size_t pip_used_threshold = (ShenandoahHeapRegion::region_size_bytes() * ShenandoahGenerationalMinPIPUsage) / 100;
+
   size_t old_consumed = 0;
   size_t promo_potential = 0;
   size_t candidates = 0;
@@ -557,10 +559,8 @@ size_t ShenandoahGeneration::select_aged_regions(size_t old_available) {
       continue;
     }
     if (heap->is_tenurable(r)) {
-      if ((r->garbage() < old_garbage_threshold)) {
-        // This tenure-worthy region has too little garbage, so we do not want to expend the copying effort to
-        // reclaim the garbage; instead this region may be eligible for promotion-in-place to the
-        // old generation.
+      if ((r->garbage() < old_garbage_threshold) && (r->used() > pip_used_threshold)) {
+        // We prefer to promote this region in place because is has a small amount of garbage and a large usage.
         HeapWord* tams = ctx->top_at_mark_start(r);
         HeapWord* original_top = r->top();
         if (!heap->is_concurrent_old_mark_in_progress() && tams == original_top) {
@@ -586,7 +586,7 @@ size_t ShenandoahGeneration::select_aged_regions(size_t old_available) {
         // Else, we do not promote this region (either in place or by copy) because it has received new allocations.
 
         // During evacuation, we exclude from promotion regions for which age > tenure threshold, garbage < garbage-threshold,
-        //  and get_top_before_promote() != tams
+        //  used > pip_used_threshold, and get_top_before_promote() != tams
       } else {
         // Record this promotion-eligible candidate region. After sorting and selecting the best candidates below,
         // we may still decide to exclude this promotion-eligible region from the current collection set.  If this
@@ -797,14 +797,13 @@ void ShenandoahGeneration::cancel_marking() {
 
 ShenandoahGeneration::ShenandoahGeneration(ShenandoahGenerationType type,
                                            uint max_workers,
-                                           size_t max_capacity,
-                                           size_t soft_max_capacity) :
+                                           size_t max_capacity) :
   _type(type),
   _task_queues(new ShenandoahObjToScanQueueSet(max_workers)),
   _ref_processor(new ShenandoahReferenceProcessor(MAX2(max_workers, 1U))),
   _affiliated_region_count(0), _humongous_waste(0), _evacuation_reserve(0),
   _used(0), _bytes_allocated_since_gc_start(0),
-  _max_capacity(max_capacity), _soft_max_capacity(soft_max_capacity),
+  _max_capacity(max_capacity),
   _heuristics(nullptr)
 {
   _is_marking_complete.set();
@@ -950,7 +949,7 @@ size_t ShenandoahGeneration::available_with_reserve() const {
 }
 
 size_t ShenandoahGeneration::soft_available() const {
-  return available(soft_max_capacity());
+  return available(ShenandoahHeap::heap()->soft_max_capacity());
 }
 
 size_t ShenandoahGeneration::available(size_t capacity) const {

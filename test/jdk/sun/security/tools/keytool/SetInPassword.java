@@ -1,12 +1,10 @@
 /*
- * Copyright (c) 2002, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ * published by the Free Software Foundation.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -23,21 +21,24 @@
  * questions.
  */
 
-
-#include "Utilities.h"
-// Platform.java includes
-#include "com_sun_media_sound_Platform.h"
-
 /*
- * Declare library specific JNI_Onload entry if static build
+ * @test
+ * @bug 8354469
+ * @summary ensure password can be read from user's System.in
+ * @library /test/lib
+ * @modules java.base/sun.security.tools.keytool
  */
-DEF_STATIC_JNI_OnLoad
 
-/*
- * Class:     com_sun_media_sound_Platform
- * Method:    nIsBigEndian
- * Signature: ()Z
- */
-JNIEXPORT jboolean JNICALL Java_com_sun_media_sound_Platform_nIsBigEndian(JNIEnv *env, jclass clss) {
-    return UTIL_IsBigEndianPlatform();
+import jdk.test.lib.SecurityTools;
+
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+
+public class SetInPassword {
+    public static void main(String[] args) throws Exception {
+        SecurityTools.keytool("-keystore ks -storepass changeit -genkeypair -alias a -dname CN=A -keyalg EC")
+                .shouldHaveExitValue(0);
+        System.setIn(new ByteArrayInputStream("changeit".getBytes(StandardCharsets.UTF_8)));
+        sun.security.tools.keytool.Main.main("-keystore ks -alias a -certreq".split(" "));
+    }
 }

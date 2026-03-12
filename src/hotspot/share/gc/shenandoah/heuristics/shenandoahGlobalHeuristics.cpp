@@ -42,8 +42,6 @@ void ShenandoahGlobalHeuristics::choose_collection_set_from_regiondata(Shenandoa
   QuickSort::sort<RegionData>(data, (int) size, compare_by_garbage);
 
   choose_global_collection_set(cset, data, size, actual_free, 0 /* cur_young_garbage */);
-
-  log_cset_composition(cset);
 }
 
 
@@ -53,7 +51,7 @@ void ShenandoahGlobalHeuristics::choose_global_collection_set(ShenandoahCollecti
                                                               size_t cur_young_garbage) const {
   auto heap = ShenandoahGenerationalHeap::heap();
   size_t region_size_bytes = ShenandoahHeapRegion::region_size_bytes();
-  size_t capacity = heap->young_generation()->max_capacity();
+  size_t capacity = heap->soft_max_capacity();
   size_t garbage_threshold = region_size_bytes * ShenandoahGarbageThreshold / 100;
   size_t ignore_threshold = region_size_bytes * ShenandoahIgnoreGarbageThreshold / 100;
 
