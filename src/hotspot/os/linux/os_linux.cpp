@@ -2617,12 +2617,12 @@ void os::print_memory_info(outputStream* st) {
   struct sysinfo si;
   int ret = sysinfo(&si);
   assert(ret == 0, "sysinfo failed: %s", os::strerror(errno));
-  size_t phys_mem = physical_memory();
-  st->print(", physical %zuk",
+  physical_memory_size_type phys_mem = physical_memory();
+  st->print(", physical " PHYS_MEM_TYPE_FORMAT "k",
             phys_mem >> 10);
-  size_t avail_mem = 0;
+  physical_memory_size_type avail_mem = 0;
   (void)os::available_memory(avail_mem);
-  st->print("(%zuk free)",
+  st->print("(" PHYS_MEM_TYPE_FORMAT "k free)",
             avail_mem >> 10);
   if (ret == 0) {
     st->print(", swap " UINT64_FORMAT "k",
