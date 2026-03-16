@@ -53,7 +53,6 @@ public:
   }
 
   void print_init_logger() const override;
-  void print_tracing_info() const override;
 
   size_t unsafe_max_tlab_alloc(Thread *thread) const override;
 
