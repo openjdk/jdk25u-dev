@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, Microsoft, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,22 +22,34 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+package com.sun.management.internal;
 
+import javax.management.ObjectName;
+import jdk.management.HotSpotAOTCacheMXBean;
+import sun.management.Util;
+import sun.management.VMManagement;
 
-#include "Utilities.h"
-// Platform.java includes
-#include "com_sun_media_sound_Platform.h"
-
-/*
- * Declare library specific JNI_Onload entry if static build
+/**
+ * Implementation class for the AOT Cache subsystem.
+ *
+ * ManagementFactory.getRuntimeMXBean() returns an instance
+ * of this class.
  */
-DEF_STATIC_JNI_OnLoad
+public class HotSpotAOTCacheImpl implements HotSpotAOTCacheMXBean {
 
-/*
- * Class:     com_sun_media_sound_Platform
- * Method:    nIsBigEndian
- * Signature: ()Z
- */
-JNIEXPORT jboolean JNICALL Java_com_sun_media_sound_Platform_nIsBigEndian(JNIEnv *env, jclass clss) {
-    return UTIL_IsBigEndianPlatform();
+    private final VMManagement jvm;
+    /**
+     * Constructor of HotSpotAOTCacheImpl class.
+     */
+    HotSpotAOTCacheImpl(VMManagement vm) {
+        this.jvm = vm;
+    }
+
+    public boolean endRecording() {
+        return jvm.endAOTRecording();
+    }
+
+    public ObjectName getObjectName() {
+        return Util.newObjectName("jdk.management:type=HotSpotAOTCache");
+    }
 }
