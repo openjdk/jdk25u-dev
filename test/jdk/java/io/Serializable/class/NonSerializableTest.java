@@ -107,9 +107,12 @@ public class NonSerializableTest {
         assertTrue(b, "Compilation failed");
         String[] params = Arrays.copyOfRange(args, 1, args.length);
         ProcessBuilder pb = ProcessTools.createLimitedTestJavaProcessBuilder(params);
-        try (Process p = ProcessTools.startProcess("Serializable Test", pb)) {
+        Process p = ProcessTools.startProcess("Serializable Test", pb);
+        try {
             int exitValue = p.waitFor();
             assertEquals(0, exitValue, "Test failed");
+        } finally {
+            p.destroy();
         }
     }
 }
