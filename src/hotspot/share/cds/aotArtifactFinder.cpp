@@ -321,7 +321,7 @@ void AOTArtifactFinder::check_critical_class(InstanceKlass* ik) {
     const char* msg = err_msg("Critical class %s has been excluded. %s cannot be written.",
                               ik->external_name(),
                               CDSConfig::type_of_archive_being_written());
-    AOTMetaspace::unrecoverable_writing_error(msg);
+    MetaspaceShared::unrecoverable_writing_error(msg);
   }
 }
 
