@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -5245,6 +5245,20 @@ public final class Collections {
         @Override
         public int hashCode() {
             return Objects.hashCode(element);
+        }
+        @Override
+        public Object[] toArray() {
+            return new Object[] {element};
+        }
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> T[] toArray(T[] a) {
+            if (a.length < 1)
+                a = (T[])Array.newInstance(a.getClass().getComponentType(), 1);
+            a[0] = (T)element;
+            if (a.length > 1)
+                a[1] = null;
+            return a;
         }
     }
 
