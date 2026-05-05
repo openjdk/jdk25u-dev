@@ -358,10 +358,6 @@ public class FlowAdapterPublisherTest implements HttpServerAdapters {
 
     @BeforeTest
     public void setup() throws Exception {
-        sslContext = new SimpleSSLContext().get();
-        if (sslContext == null)
-            throw new AssertionError("Unexpected null sslContext");
-
         httpTestServer = HttpTestServer.create(Version.HTTP_1_1);
         httpTestServer.addHandler(new HttpEchoHandler(), "/http1/echo");
         httpURI = "http://" + httpTestServer.serverAuthority() + "/http1/echo";

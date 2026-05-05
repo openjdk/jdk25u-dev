@@ -190,10 +190,6 @@ public class BodyHandlerOfFileDownloadTest implements HttpServerAdapters {
 
     @BeforeTest
     public void setup() throws Exception {
-        sslContext = new SimpleSSLContext().get();
-        if (sslContext == null)
-            throw new AssertionError("Unexpected null sslContext");
-
         defaultFsPath = defaultFsDir();
         zipFs = newZipFs();
         zipFsPath = zipFsDir(zipFs);

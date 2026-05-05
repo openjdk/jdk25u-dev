@@ -238,10 +238,6 @@ public class NonAsciiCharsInURI implements HttpServerAdapters {
     public void setup() throws Exception {
         out.println(now() + "begin setup");
 
-        sslContext = new SimpleSSLContext().get();
-        if (sslContext == null)
-            throw new AssertionError("Unexpected null sslContext");
-
         HttpTestHandler handler = new HttpUriStringHandler();
         httpTestServer = HttpTestServer.create(HTTP_1_1);
         httpTestServer.addHandler(handler, "/http1/get");

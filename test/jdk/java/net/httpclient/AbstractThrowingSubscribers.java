@@ -76,7 +76,7 @@ import org.junit.jupiter.api.extension.TestWatcher;
 
 public abstract class AbstractThrowingSubscribers implements HttpServerAdapters {
 
-    static SSLContext sslContext;
+    private static final SSLContext sslContext = SimpleSSLContext.findSSLContext();
     static HttpTestServer httpTestServer;    // HTTP/1.1    [ 4 servers ]
     static HttpTestServer httpsTestServer;   // HTTPS/1.1
     static HttpTestServer http2TestServer;   // HTTP/2 ( h2c )

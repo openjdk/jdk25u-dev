@@ -146,10 +146,6 @@ public class RetryWithCookie implements HttpServerAdapters {
 
     @BeforeTest
     public void setup() throws Exception {
-        sslContext = new SimpleSSLContext().get();
-        if (sslContext == null)
-            throw new AssertionError("Unexpected null sslContext");
-
         httpTestServer = HttpTestServer.create(HTTP_1_1);
         httpTestServer.addHandler(new CookieRetryHandler(), "/http1/cookie/");
         httpURI = "http://" + httpTestServer.serverAuthority() + "/http1/cookie/retry";

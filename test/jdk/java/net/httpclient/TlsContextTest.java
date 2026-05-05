@@ -72,7 +72,7 @@ public class TlsContextTest implements HttpServerAdapters {
         // Re-enable TLSv1 and TLSv1.1 since test depends on them
         SecurityUtils.removeFromDisabledTlsAlgs("TLSv1", "TLSv1.1");
 
-        server = SimpleSSLContext.getContext("TLS");
+        server = SimpleSSLContext.findSSLContext("TLS");
         final ExecutorService executor = Executors.newCachedThreadPool();
         https2Server = HttpTestServer.of(
                 new Http2TestServer("localhost", true, 0, executor, 50, null, server, true));

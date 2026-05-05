@@ -70,7 +70,7 @@ public class ContentLengthHeaderTest implements HttpServerAdapters {
     static HttpTestServer testContentLengthServerH1;
     static HttpTestServer testContentLengthServerH2;
     static PrintStream testLog = System.err;
-    static SSLContext sslContext;
+    private static final SSLContext sslContext = SimpleSSLContext.findSSLContext();
 
     HttpClient hc;
     URI testContentLengthURIH1;

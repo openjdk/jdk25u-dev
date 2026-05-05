@@ -668,10 +668,6 @@ public class LineBodyHandlerTest implements HttpServerAdapters {
 
     @BeforeTest
     public void setup() throws Exception {
-        sslContext = new SimpleSSLContext().get();
-        if (sslContext == null)
-            throw new AssertionError("Unexpected null sslContext");
-
         httpTestServer = HttpTestServer.create(HTTP_1_1, null,
                 executorFor("HTTP/1.1 Server Thread"));
         httpTestServer.addHandler(new HttpTestEchoHandler(), "/http1/echo");

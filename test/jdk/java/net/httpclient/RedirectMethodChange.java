@@ -58,7 +58,7 @@ import static org.testng.Assert.assertEquals;
 
 public class RedirectMethodChange implements HttpServerAdapters {
 
-    SSLContext sslContext;
+    private static final SSLContext sslContext = SimpleSSLContext.findSSLContext();
     HttpClient client;
 
     HttpTestServer httpTestServer;        // HTTP/1.1    [ 4 servers ]
