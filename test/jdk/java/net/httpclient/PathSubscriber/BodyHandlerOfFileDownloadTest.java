@@ -88,7 +88,7 @@ public class BodyHandlerOfFileDownloadTest implements HttpServerAdapters {
     static final String MSG = "msg";
     static final String contentDispositionValue = "attachment; filename=example.html";
 
-    SSLContext sslContext;
+    private static final SSLContext sslContext = SimpleSSLContext.findSSLContext();
     HttpServerAdapters.HttpTestServer httpTestServer;    // HTTP/1.1      [ 4 servers ]
     HttpServerAdapters.HttpTestServer httpsTestServer;   // HTTPS/1.1
     HttpServerAdapters.HttpTestServer http2TestServer;   // HTTP/2 ( h2c )

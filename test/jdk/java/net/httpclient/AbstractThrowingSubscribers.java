@@ -759,10 +759,6 @@ public abstract class AbstractThrowingSubscribers implements HttpServerAdapters 
         System.out.println(now() + "setup");
         System.err.println(now() + "setup");
 
-        sslContext = new SimpleSSLContext().get();
-        if (sslContext == null)
-            throw new AssertionError("Unexpected null sslContext");
-
         // HTTP/1.1
         HttpTestHandler h1_fixedLengthHandler = new HTTP_FixedLengthHandler();
         HttpTestHandler h1_chunkHandler = new HTTP_ChunkedHandler();

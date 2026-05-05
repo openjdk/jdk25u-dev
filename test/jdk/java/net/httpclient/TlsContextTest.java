@@ -85,10 +85,10 @@ public class TlsContextTest implements HttpServerAdapters {
     @DataProvider(name = "scenarios")
     public Object[][] scenarios() throws Exception {
         return new Object[][]{
-                { SimpleSSLContext.getContext("TLS"),     HTTP_2,   "TLSv1.3" },
-                { SimpleSSLContext.getContext("TLSv1.2"), HTTP_2,   "TLSv1.2" },
-                { SimpleSSLContext.getContext("TLSv1.1"), HTTP_1_1, "TLSv1.1" },
-                { SimpleSSLContext.getContext("TLSv1.1"), HTTP_2,   "TLSv1.1" },
+                { SimpleSSLContext.findSSLContext("TLS"),     HTTP_2,   "TLSv1.3" },
+                { SimpleSSLContext.findSSLContext("TLSv1.2"), HTTP_2,   "TLSv1.2" },
+                { SimpleSSLContext.findSSLContext("TLSv1.1"), HTTP_1_1, "TLSv1.1" },
+                { SimpleSSLContext.findSSLContext("TLSv1.1"), HTTP_2,   "TLSv1.1" },
         };
     }
 
