@@ -1,5 +1,5 @@
 /*
- * Copyright Amazon.com Inc. or its affiliates. All Rights Reserved.
+ * Copyright (c) 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -19,33 +19,26 @@
  * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
  * or visit www.oracle.com if you need additional information or have any
  * questions.
- *
  */
 
-/*
- * @test id=rotation
- * @requires vm.gc.Shenandoah
- *
- * @run main/othervm -Xmx1g -Xms1g -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
- *      -XX:+ShenandoahRegionSampling
- *      -Xlog:gc+region=trace:region-snapshots-%p.log::filesize=100,filecount=3
- *      -XX:+UseShenandoahGC
- *      TestShenandoahRegionLogging
- */
-import java.io.File;
+import java.security.SecureRandom;
 import java.util.Arrays;
 
-public class TestShenandoahRegionLogging {
+/*
+ * @test
+ * @bug 8364657
+ * @summary verify the behavior of SecureRandom instance returned by
+ *          SecureRandom.getInstanceStrong()
+ * @run main TestStrong
+ */
+public class TestStrong {
+
     public static void main(String[] args) throws Exception {
-        System.gc();
 
-        File directory = new File(".");
-        File[] files = directory.listFiles((dir, name) -> name.startsWith("region-snapshots"));
-        System.out.println(Arrays.toString(files));
-
-        // Expect one or more log files when region logging is enabled
-        if (files == null || files.length == 0) {
-            throw new Error("Expected at least one log file for region sampling data.");
-        }
+        final SecureRandom random = SecureRandom.getInstanceStrong();
+        System.out.println("going to generate random seed using " + random);
+        final byte[] seed = random.generateSeed(0);
+        System.out.println("random seed generated");
+        System.out.println("seed: " + Arrays.toString(seed));
     }
 }
