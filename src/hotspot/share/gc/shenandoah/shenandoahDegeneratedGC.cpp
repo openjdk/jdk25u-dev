@@ -115,8 +115,7 @@ void ShenandoahDegenGC::op_degenerated() {
   }
 #endif
 
-  ShenandoahMetricsSnapshot metrics;
-  metrics.snap_before();
+  ShenandoahMetricsSnapshot metrics(heap->free_set());
 
   switch (_degen_point) {
     // The cases below form the Duff's-like device: it describes the actual GC cycle,
@@ -308,16 +307,18 @@ void ShenandoahDegenGC::op_degenerated() {
     Universe::verify();
   }
 
-  metrics.snap_after();
-
   // Decide if this cycle made good progress, and, if not, should it upgrade to a full GC.
-  const bool progress = metrics.is_good_progress(_generation);
+  const bool progress = metrics.is_good_progress();
   ShenandoahCollectorPolicy* policy = heap->shenandoah_policy();
   policy->record_degenerated(_generation->is_young(), _abbreviated, progress);
   if (progress) {
     heap->notify_gc_progress();
+    _generation->heuristics()->record_degenerated();
   } else if (!heap->mode()->is_generational() || policy->generational_should_upgrade_degenerated_gc()) {
+    // Upgrade to full GC, register full-GC impact on heuristics.
     op_degenerated_futile();
+  } else {
+    _generation->heuristics()->record_degenerated();
   }
 }
 
