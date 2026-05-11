@@ -23,16 +23,6 @@
  */
 
 /*
- * @test id=POSIX_SPAWN
- * @bug 8377907
- * @summary Test that demonstrates the hanging-parent-on-native-concurrent-forks problem
- * @requires os.family != "windows"
- * @requires vm.flagless
- * @library /test/lib
- * @run main/othervm/manual -Djdk.lang.Process.launchMechanism=POSIX_SPAWN ConcNativeForkTest
- */
-
-/*
  * @test id=FORK
  * @bug 8377907
  * @summary Test that demonstrates the hanging-parent-on-native-concurrent-forks problem
@@ -51,8 +41,6 @@
  * @library /test/lib
  * @run main/othervm/manual -Djdk.lang.Process.launchMechanism=VFORK ConcNativeForkTest
  */
-
-import jtreg.SkippedException;
 
 public class ConcNativeForkTest {
 
@@ -81,11 +69,8 @@ public class ConcNativeForkTest {
 
     public static void main(String[] args) throws Exception {
 
-        String lM = System.getProperty("jdk.lang.Process.launchMechanism");
-        System.out.println("jdk.lang.Process.launchMechanism=" + lM);
-        if (lM.equalsIgnoreCase("POSIX_SPAWN")) {
-            throw new SkippedException("Skipping test: patch 8377907 not backported for POSIX_SPAWN mode.");
-        }
+        System.out.println("jdk.lang.Process.launchMechanism=" +
+                System.getProperty("jdk.lang.Process.launchMechanism"));
 
         System.loadLibrary("ConcNativeFork");
 

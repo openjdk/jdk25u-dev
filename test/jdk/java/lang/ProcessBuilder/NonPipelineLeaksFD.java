@@ -22,8 +22,6 @@
  * questions.
  */
 
-import jtreg.SkippedException;
-
 import java.io.*;
 
 /*
@@ -40,14 +38,6 @@ import java.io.*;
  * @requires os.family == "linux"
  * @library /test/lib
  * @run main/othervm -Djdk.lang.Process.launchMechanism=vfork NonPipelineLeaksFD
- */
-
-/*
- * @test id=POSIX_SPAWN
- * @summary Check that we don't accumulate leaked FDs in the parent process
- * @requires os.family == "linux"
- * @library /test/lib
- * @run main/othervm -Djdk.lang.Process.launchMechanism=posix_spawn NonPipelineLeaksFD
  */
 
 public class NonPipelineLeaksFD {
@@ -165,11 +155,8 @@ public class NonPipelineLeaksFD {
 
     public static void main(String[] args) throws Exception {
 
-        String lM = System.getProperty("jdk.lang.Process.launchMechanism");
-        System.out.println("jdk.lang.Process.launchMechanism=" + lM);
-        if (lM.equalsIgnoreCase("POSIX_SPAWN")) {
-            throw new SkippedException("Skipping test: patch 8377907 not backported for POSIX_SPAWN mode.");
-        }
+        System.out.println("jdk.lang.Process.launchMechanism=" +
+                System.getProperty("jdk.lang.Process.launchMechanism"));
 
         int c1 = countNumberOfOpenFileDescriptors();
         doTestNTimesAndCountFDs(NonPipelineLeaksFD::runPosWithPipes, "runPosWithPipes");

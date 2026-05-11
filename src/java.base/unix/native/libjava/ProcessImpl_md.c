@@ -756,7 +756,8 @@ Java_java_lang_ProcessImpl_forkAndExec(JNIEnv *env,
          * a change (including prerequisites) would be far too invasive for LTS releases. We
          * therefore only downport a very small part of it, namely the fix for the FORK/VFORK
          * modes. Fixing FORK/VFORK just requires us to open pipes with CLOEXEC. Fixing the
-         * POSIX_SPAWN mode requires rewriting large parts of the spawn layer (see JDK-8377907).
+         * POSIX_SPAWN mode, otoh, would require rewriting large parts of the spawn layer
+         * (see JDK-8377907).
          */
         if ((fds[0] == -1 && pipeSafely(in)  < 0) ||
             (fds[1] == -1 && pipeSafely(out) < 0) ||

@@ -42,18 +42,7 @@
  * @run main/othervm/native -Djdk.lang.Process.launchMechanism=VFORK PipesCloseOnExecTest
  */
 
-/*
- * @test id=POSIX_SPAWN
- * @bug 8377907
- * @summary Check that we don't open pipes without CLOEXCEC
- * @requires os.family == "linux"
- * @requires vm.flagless
- * @library /test/lib
- * @run main/othervm/native -Djdk.lang.Process.launchMechanism=POSIX_SPAWN PipesCloseOnExecTest
- */
-
 import jdk.test.lib.process.OutputAnalyzer;
-import jtreg.SkippedException;
 
 import java.io.IOException;
 import java.time.LocalTime;
@@ -93,11 +82,8 @@ public class PipesCloseOnExecTest {
 
     public static void main(String[] args) throws Exception {
 
-        String lM = System.getProperty("jdk.lang.Process.launchMechanism");
-        System.out.println("jdk.lang.Process.launchMechanism=" + lM);
-        if (lM.equalsIgnoreCase("POSIX_SPAWN")) {
-            throw new SkippedException("Skipping test: patch 8377907 not backported for POSIX_SPAWN mode.");
-        }
+        System.out.println("jdk.lang.Process.launchMechanism=" +
+                System.getProperty("jdk.lang.Process.launchMechanism"));
 
         System.loadLibrary("PipesCloseOnExec");
 
