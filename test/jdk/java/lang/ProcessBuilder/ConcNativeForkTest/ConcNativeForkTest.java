@@ -36,7 +36,7 @@
  * @test id=VFORK
  * @bug 8377907
  * @summary Test that demonstrates the hanging-parent-on-native-concurrent-forks problem
- * @requires os.family != "windows"
+ * @requires os.family == "linux"
  * @requires vm.flagless
  * @library /test/lib
  * @run main/othervm/manual -Djdk.lang.Process.launchMechanism=VFORK ConcNativeForkTest
