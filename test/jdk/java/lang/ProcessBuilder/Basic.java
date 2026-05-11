@@ -46,9 +46,21 @@
  * @modules java.base/java.lang:open
  *          java.base/java.io:open
  *          java.base/jdk.internal.misc
- * @requires (os.family == "linux" & !vm.musl)
+ * @requires !vm.musl
+ * @requires vm.flagless
  * @library /test/lib
  * @run main/othervm/timeout=300 -Djdk.lang.Process.launchMechanism=posix_spawn Basic
+ */
+
+/*
+ * @test
+ * @modules java.base/java.lang:open
+ *          java.base/java.io:open
+ *          java.base/jdk.internal.misc
+ * @requires (os.family == "linux" & !vm.musl)
+ * @requires vm.flagless
+ * @library /test/lib
+ * @run main/othervm/timeout=300 -Djdk.lang.Process.launchMechanism=vfork Basic
  */
 
 import java.lang.ProcessBuilder.Redirect;
@@ -1222,6 +1234,20 @@ public class Basic {
             equal(r.out(), "standard output");
             equal(r.err(), "standard error");
         }
+
+        //----------------------------------------------------------------
+        // Default: should go to pipes (use a fresh ProcessBuilder)
+        //----------------------------------------------------------------
+        {
+            ProcessBuilder pb2 = new ProcessBuilder(childArgs);
+            Process p = pb2.start();
+            new PrintStream(p.getOutputStream()).print("standard input");
+            p.getOutputStream().close();
+            ProcessResults r = run(p);
+            equal(r.exitValue(), 0);
+            equal(r.out, "standard output");
+            equal(r.err, "standard error");
+        }
     }
 
     static void checkProcessPid() {
@@ -1259,6 +1285,8 @@ public class Basic {
             System.out.println("This appears to be a Unix system.");
         if (UnicodeOS.is())
             System.out.println("This appears to be a Unicode-based OS.");
+
+        System.out.println("Using:" + System.getProperty("jdk.lang.Process.launchMechanism"));
 
         try { testIORedirection(); }
         catch (Throwable t) { unexpected(t); }
