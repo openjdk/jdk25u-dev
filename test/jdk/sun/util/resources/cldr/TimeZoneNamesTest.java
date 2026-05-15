@@ -243,16 +243,16 @@ public class TimeZoneNamesTest {
 
             // Hawaii/Aleutian
             //
-            // Note that CLDR v48 only contains the standard names in "Hawaii"
-            // metazone. Other long names are synthesized, and short names are
-            // from TZDB. "America/Adak" reflects the "Hawaii_Aleutian" metazone
-            // names.
+            // CLDR v47 does not contain CLDR-18531
+            // so both Pacific/Honolulu and America/Adak
+            // share the same long names and differ only
+            // on the short names.
             {"Pacific/Honolulu", Locale.US,
                 "Hawaii-Aleutian Standard Time",
                 "HST",
-                "Honolulu Daylight Time",
-                "HST",
-                "Honolulu Time",
+                "Hawaii-Aleutian Daylight Time",
+                "HDT",
+                "Hawaii-Aleutian Time",
                 "HST"},
             {"America/Adak", Locale.US,
                 "Hawaii-Aleutian Standard Time",
