@@ -62,7 +62,7 @@ public class NonPipelineLeaksFD {
 
     static void printOpenFileDescriptors() {
         long mypid =  ProcessHandle.current().pid();
-        try{
+        try {
             Process p = new ProcessBuilder("lsof", "-p", Long.toString(mypid))
                     .inheritIO().start();
             p.waitFor();
