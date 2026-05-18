@@ -95,7 +95,7 @@ public class NonPipelineLeaksFD {
 
     static void runThisExpectError(ProcessBuilder bld) {
         boolean failed = false;
-        try{
+        try {
             Process p = bld.start();
             p.waitFor();
         } catch (IOException | InterruptedException e) {
