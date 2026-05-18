@@ -80,7 +80,7 @@ public class ConcNativeForkTest {
         final int numNativeProcesses = 250;
         Process[] processes = new Process[numJavaProcesses];
 
-        for (int iteration = 0; iteration < numIterations; iteration ++) {
+        for (int iteration = 0; iteration < numIterations; iteration++) {
 
             if (!prepareNativeForkerThread(numNativeProcesses)) {
                 throw new RuntimeException("Failed to start native forker thread (see stdout)");
