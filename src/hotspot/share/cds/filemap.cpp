@@ -1317,7 +1317,7 @@ bool FileMapInfo::map_aot_code_region(ReservedSpace rs) {
     assert(mapped_base == requested_base, "must be");
 
     if (VerifySharedSpaces && !r->check_region_crc(mapped_base)) {
-      aot_log_error(aot)("region %d CRC error", AOTMetaspace::ac);
+      aot_log_error(aot)("region %d CRC error", MetaspaceShared::ac);
       os::unmap_memory(mapped_base, r->used_aligned());
       return false;
     }
