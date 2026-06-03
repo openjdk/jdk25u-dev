@@ -707,6 +707,7 @@ ClassPathEntry* ClassLoader::create_class_path_entry(JavaThread* current,
     if (zip != nullptr && error_msg == nullptr) {
       new_entry = new ClassPathZipEntry(zip, path);
     } else {
+      log_info(class, path)("failed: %s, err: %s", path, error_msg);
       return nullptr;
     }
     log_info(class, path)("opened: %s", path);
@@ -1386,6 +1387,10 @@ char* ClassLoader::lookup_vm_options() {
   jio_snprintf(modules_path, JVM_MAXPATHLEN, "%s%slib%smodules", Arguments::get_java_home(), fileSep, fileSep);
   JImage_file =(*JImageOpen)(modules_path, &error);
   if (JImage_file == nullptr) {
+    if (Arguments::has_jimage()) {
+      // The modules file exists but is unreadable or corrupt
+      vm_exit_during_initialization(err_msg("Unable to load %s", modules_path));
+    }
     return nullptr;
   }
 
