@@ -482,7 +482,7 @@ void MacroAssembler::set_dest_of_bc_far_at(address instruction_addr, address des
     // variant 3, far cond branch to the next instruction, already patched to nops:
     //
     //    nop
-    //    endgroup
+    //    nop
     //  SKIP/DEST:
     //
     return;
@@ -499,7 +499,7 @@ void MacroAssembler::set_dest_of_bc_far_at(address instruction_addr, address des
   if (is_bc_far_variant2_at(instruction_addr) && dest == instruction_addr + 8) {
     // Far branch to next instruction: Optimize it by patching nops (produce variant 3).
     masm.nop();
-    masm.endgroup();
+    masm.nop();
   } else {
     if (is_bc_far_variant1_at(instruction_addr)) {
       // variant 1, the 1st instruction contains the destination address:
@@ -3436,23 +3436,19 @@ void MacroAssembler::store_klass_gap(Register dst_oop, Register val) {
   }
 }
 
-int MacroAssembler::instr_size_for_decode_klass_not_null() {
+int MacroAssembler::instr_size_for_load_klass() {
   static int computed_size = -1;
 
   // Not yet computed?
   if (computed_size == -1) {
 
-    if (!UseCompressedClassPointers) {
-      computed_size = 0;
-    } else {
-      // Determine by scratch emit.
-      ResourceMark rm;
-      int code_size = 8 * BytesPerInstWord;
-      CodeBuffer cb("decode_klass_not_null scratch buffer", code_size, 0);
-      MacroAssembler* a = new MacroAssembler(&cb);
-      a->decode_klass_not_null(R11_scratch1);
-      computed_size = a->offset();
-    }
+    // Determine by scratch emit.
+    ResourceMark rm;
+    int code_size = 16 * BytesPerInstWord;
+    CodeBuffer cb("load_klass scratch buffer", code_size, 0);
+    MacroAssembler* a = new MacroAssembler(&cb);
+    a->load_klass(R11_scratch1, R11_scratch1);
+    computed_size = a->offset();
   }
 
   return computed_size;

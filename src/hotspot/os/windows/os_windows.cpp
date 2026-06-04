@@ -1719,6 +1719,8 @@ static int _print_module(const char* fname, address base_address,
 // same architecture as Hotspot is running on
 void * os::dll_load(const char *name, char *ebuf, int ebuflen) {
   log_info(os)("attempting shared library load of %s", name);
+  Events::log_dll_message(nullptr, "Attempting to load shared library %s", name);
+
   void* result;
   JFR_ONLY(NativeLibraryLoadEvent load_event(name, &result);)
   result = LoadLibrary(name);
@@ -5085,6 +5087,13 @@ jlong os::seek_to_file_offset(int fd, jlong offset) {
   return (jlong)::_lseeki64(fd, (__int64)offset, SEEK_SET);
 }
 
+int64_t os::ftell(FILE* file) {
+  return ::_ftelli64(file);
+}
+
+int os::fseek(FILE* file, int64_t offset, int whence) {
+  return ::_fseeki64(file,offset, whence);
+}
 
 jlong os::lseek(int fd, jlong offset, int whence) {
   return (jlong) ::_lseeki64(fd, offset, whence);
