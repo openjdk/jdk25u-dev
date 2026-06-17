@@ -1356,11 +1356,11 @@ jvmtiError VM_RedefineClasses::load_new_class_versions() {
     // constant pools
     HandleMark hm(current);
     InstanceKlass* the_class = get_ik(_class_defs[i].klass);
-    size_t avail_mem = 0;
+    physical_memory_size_type avail_mem = 0;
     // Return value ignored - defaulting to 0 on failure.
     (void)os::available_memory(avail_mem);
     log_debug(redefine, class, load)
-      ("loading name=%s kind=%d (avail_mem=%zuK)",
+      ("loading name=%s kind=%d (avail_mem=" PHYS_MEM_TYPE_FORMAT "K)",
        the_class->external_name(), _class_load_kind, avail_mem >> 10);
 
     ClassFileStream st((u1*)_class_defs[i].class_bytes,
@@ -1485,6 +1485,8 @@ jvmtiError VM_RedefineClasses::load_new_class_versions() {
       } else {
         return JVMTI_ERROR_INTERNAL;
       }
+    } else if (res != JVMTI_ERROR_NONE) {
+      return res;
     }
 
 #ifdef ASSERT
@@ -1528,7 +1530,7 @@ jvmtiError VM_RedefineClasses::load_new_class_versions() {
     // Return value ignored - defaulting to 0 on failure.
     (void)os::available_memory(avail_mem);
     log_debug(redefine, class, load)
-      ("loaded name=%s (avail_mem=%zuK)", the_class->external_name(), avail_mem >> 10);
+      ("loaded name=%s (avail_mem=" PHYS_MEM_TYPE_FORMAT "K)", the_class->external_name(), avail_mem >> 10);
   }
 
   return JVMTI_ERROR_NONE;
@@ -2057,7 +2059,7 @@ bool VM_RedefineClasses::rewrite_cp_refs_in_record_attribute(InstanceKlass* scra
       AnnotationArray* type_annotations = component->type_annotations();
       if (type_annotations != nullptr && type_annotations->length() != 0) {
         int byte_i = 0;  // byte index into annotations
-        if (!rewrite_cp_refs_in_annotations_typeArray(type_annotations, byte_i)) {
+        if (!rewrite_cp_refs_in_type_annotations_typeArray(type_annotations, byte_i, "record_info")) {
           log_debug(redefine, class, annotation)("bad record_component_type_annotations at %d", i);
           // propagate failure back to caller
           return false;
@@ -4425,11 +4427,11 @@ void VM_RedefineClasses::redefine_single_class(Thread* current, jclass the_jclas
     ResourceMark rm(current);
     // increment the classRedefinedCount field in the_class and in any
     // direct and indirect subclasses of the_class
-    size_t avail_mem = 0;
+    physical_memory_size_type avail_mem = 0;
     // Return value ignored - defaulting to 0 on failure.
     (void)os::available_memory(avail_mem);
     log_info(redefine, class, load)
-      ("redefined name=%s, count=%d (avail_mem=%zuK)",
+      ("redefined name=%s, count=%d (avail_mem=" PHYS_MEM_TYPE_FORMAT "K)",
        the_class->external_name(), java_lang_Class::classRedefinedCount(the_class->java_mirror()), avail_mem >> 10);
     Events::log_redefinition(current, "redefined class name=%s, count=%d",
                              the_class->external_name(),

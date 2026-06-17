@@ -1452,6 +1452,7 @@ void Arguments::set_conservative_max_heap_alignment() {
                                           os::vm_allocation_granularity(),
                                           os::max_page_size(),
                                           GCArguments::compute_heap_alignment());
+  assert(is_power_of_2(_conservative_max_heap_alignment), "Expected to be a power-of-2");
 }
 
 jint Arguments::set_ergonomics_flags() {
@@ -1631,7 +1632,7 @@ jint Arguments::set_aggressive_heap_flags() {
   // Thus, we need to make sure we're using a julong for intermediate
   // calculations.
   julong initHeapSize;
-  size_t phys_mem = os::physical_memory();
+  physical_memory_size_type phys_mem = os::physical_memory();
   julong total_memory = static_cast<julong>(phys_mem);
 
   if (total_memory < (julong) 256 * M) {
