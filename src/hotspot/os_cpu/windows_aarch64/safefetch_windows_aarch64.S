@@ -27,7 +27,7 @@
     ;  x0 : address
     ;  w1 : defaultval
 
-    AREA |.text|, CODE, READONLY
+    AREA safefetch_text, CODE
 
     ; needed to align function start to 4 byte
     ALIGN  4
