@@ -27,13 +27,12 @@
     ;  x0 : address
     ;  w1 : defaultval
 
-    AREA safefetch_text, CODE
-
     ; needed to align function start to 4 byte
     ALIGN  4
     EXPORT _SafeFetch32_fault
     EXPORT _SafeFetch32_continuation
     EXPORT SafeFetch32_impl
+    AREA safefetch_text, CODE
 
 SafeFetch32_impl
 _SafeFetch32_fault
