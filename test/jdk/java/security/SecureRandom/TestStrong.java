@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,27 +21,24 @@
  * questions.
  */
 
-import java.net.http.HttpClient.Version;
-import java.time.Duration;
-import org.testng.annotations.Test;
+import java.security.SecureRandom;
+import java.util.Arrays;
 
 /*
  * @test
- * @summary Tests for connection related timeouts
- * @bug 8208391
- * @run testng/othervm ConnectTimeoutNoProxyAsync
+ * @bug 8364657
+ * @summary verify the behavior of SecureRandom instance returned by
+ *          SecureRandom.getInstanceStrong()
+ * @run main TestStrong
  */
+public class TestStrong {
 
-public class ConnectTimeoutNoProxyAsync extends AbstractConnectTimeout {
+    public static void main(String[] args) throws Exception {
 
-    @Test(dataProvider = "variants")
-    @Override
-    public void timeoutNoProxyAsync(Version requestVersion,
-                                    String scheme,
-                                    String method,
-                                    Duration connectTimeout,
-                                    Duration requestduration)
-    {
-        super.timeoutNoProxyAsync(requestVersion, scheme, method, connectTimeout, requestduration);
+        final SecureRandom random = SecureRandom.getInstanceStrong();
+        System.out.println("going to generate random seed using " + random);
+        final byte[] seed = random.generateSeed(0);
+        System.out.println("random seed generated");
+        System.out.println("seed: " + Arrays.toString(seed));
     }
 }
