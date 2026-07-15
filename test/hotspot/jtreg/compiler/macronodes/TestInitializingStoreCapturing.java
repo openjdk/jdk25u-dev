@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2024, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,15 +23,37 @@
 
 /*
  * @test
- * @bug 8238756 8351889
- * @requires vm.debug == true & vm.flavor == "server"
- * @summary Run with -Xcomp to test -XX:VerifyIterativeGVN=11111 in debug builds.
- *
- * @run main/othervm/timeout=300 -Xcomp -XX:VerifyIterativeGVN=11111 compiler.c2.TestVerifyIterativeGVN
+ * @bug 8327012 8327963
+ * @summary Test that initializing store gets captured, i.e. moved before the InitializeNode
+ *          and made into a raw-store.
+ * @library /test/lib /
+ * @run driver compiler.macronodes.TestInitializingStoreCapturing
  */
-package compiler.c2;
 
-public class TestVerifyIterativeGVN {
-    public static void main(String[] args) {
+package compiler.macronodes;
+
+import compiler.lib.ir_framework.*;
+
+public class TestInitializingStoreCapturing {
+
+    static class A {
+        float value;
+        A(float v) { value = v; }
+    };
+
+    static public void main(String[] args) {
+        TestFramework.run();
+    }
+
+    @Test
+    @IR(counts = {IRNode.STORE_F, "= 0"})
+    static A testInitializeField() {
+        return new A(4.2f);
+    }
+
+    @Test
+    @IR(counts = {IRNode.STORE_F, "= 0"})
+    static float[] testInitializeArray() {
+        return new float[] {4.2f};
     }
 }

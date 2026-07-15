@@ -754,7 +754,7 @@ SafePointNode* PhaseIdealLoop::find_safepoint(Node* back_control, Node* x, Ideal
     }
 #ifdef ASSERT
     if (mm != nullptr) {
-      _igvn.remove_dead_node(mm);
+      _igvn.remove_dead_node(mm, PhaseIterGVN::NodeOrigin::Speculative);
     }
 #endif
   }
@@ -1587,7 +1587,7 @@ bool PhaseIdealLoop::convert_to_long_loop(Node* cmp, Node* phi, IdealLoopTree* l
       Node* n = iv_nodes.at(i);
       Node* clone = old_new[n->_idx];
       if (clone != nullptr) {
-        _igvn.remove_dead_node(clone);
+        _igvn.remove_dead_node(clone, PhaseIterGVN::NodeOrigin::Speculative);
       }
     }
     return false;
@@ -4222,7 +4222,7 @@ void PhaseIdealLoop::replace_parallel_iv(IdealLoopTree *loop) {
     _igvn.replace_node( phi2, add );
     // Sometimes an induction variable is unused
     if (add->outcnt() == 0) {
-      _igvn.remove_dead_node(add);
+      _igvn.remove_dead_node(add, PhaseIterGVN::NodeOrigin::Graph);
     }
     --i; // deleted this phi; rescan starting with next position
   }
@@ -4875,7 +4875,7 @@ void PhaseIdealLoop::build_and_optimize() {
 
   // clear out the dead code after build_loop_late
   while (_deadlist.size()) {
-    _igvn.remove_globally_dead_node(_deadlist.pop());
+    _igvn.remove_globally_dead_node(_deadlist.pop(), PhaseIterGVN::NodeOrigin::Graph);
   }
 
   eliminate_useless_zero_trip_guard();

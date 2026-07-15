@@ -979,7 +979,7 @@ void PhaseMacroExpand::process_users_of_allocation(CallNode *alloc) {
           }
           k -= (oc2 - use->outcnt());
         }
-        _igvn.remove_dead_node(use);
+        _igvn.remove_dead_node(use, PhaseIterGVN::NodeOrigin::Graph);
       } else if (use->is_ArrayCopy()) {
         // Disconnect ArrayCopy node
         ArrayCopyNode* ac = use->as_ArrayCopy();
@@ -1014,7 +1014,7 @@ void PhaseMacroExpand::process_users_of_allocation(CallNode *alloc) {
           // src can be top at this point if src and dest of the
           // arraycopy were the same
           if (src->outcnt() == 0 && !src->is_top()) {
-            _igvn.remove_dead_node(src);
+            _igvn.remove_dead_node(src, PhaseIterGVN::NodeOrigin::Graph);
           }
         }
         _igvn._worklist.push(ac);
@@ -1024,7 +1024,7 @@ void PhaseMacroExpand::process_users_of_allocation(CallNode *alloc) {
       j -= (oc1 - res->outcnt());
     }
     assert(res->outcnt() == 0, "all uses of allocated objects must be deleted");
-    _igvn.remove_dead_node(res);
+    _igvn.remove_dead_node(res, PhaseIterGVN::NodeOrigin::Graph);
   }
 
   //
@@ -1048,7 +1048,6 @@ void PhaseMacroExpand::process_users_of_allocation(CallNode *alloc) {
       if (use->is_Initialize()) {
         // Eliminate Initialize node.
         InitializeNode *init = use->as_Initialize();
-        assert(init->outcnt() <= 2, "only a control and memory projection expected");
         Node *ctrl_proj = init->proj_out_or_null(TypeFunc::Control);
         if (ctrl_proj != nullptr) {
           _igvn.replace_node(ctrl_proj, init->in(TypeFunc::Control));
@@ -1058,18 +1057,18 @@ void PhaseMacroExpand::process_users_of_allocation(CallNode *alloc) {
           assert(tmp == nullptr || tmp == _callprojs.fallthrough_catchproj, "allocation control projection");
 #endif
         }
-        Node *mem_proj = init->proj_out_or_null(TypeFunc::Memory);
-        if (mem_proj != nullptr) {
-          Node *mem = init->in(TypeFunc::Memory);
+        Node* mem = init->in(TypeFunc::Memory);
 #ifdef ASSERT
+        if (init->number_of_projs(TypeFunc::Memory) > 0) {
           if (mem->is_MergeMem()) {
-            assert(mem->in(TypeFunc::Memory) == _callprojs.fallthrough_memproj, "allocation memory projection");
+            assert(mem->as_MergeMem()->memory_at(Compile::AliasIdxRaw) == _callprojs.fallthrough_memproj, "allocation memory projection");
           } else {
             assert(mem == _callprojs.fallthrough_memproj, "allocation memory projection");
           }
-#endif
-          _igvn.replace_node(mem_proj, mem);
         }
+#endif
+        init->replace_mem_projs_by(mem, &_igvn);
+        assert(init->outcnt() == 0, "should only have had a control and some memory projections, and we removed them");
       } else  {
         assert(false, "only Initialize or AddP expected");
       }
@@ -1507,7 +1506,7 @@ void PhaseMacroExpand::expand_allocate_common(
       transform_later(_callprojs.fallthrough_memproj);
     }
     migrate_outs(_callprojs.catchall_memproj, _callprojs.fallthrough_memproj);
-    _igvn.remove_dead_node(_callprojs.catchall_memproj);
+    _igvn.remove_dead_node(_callprojs.catchall_memproj, PhaseIterGVN::NodeOrigin::Graph);
   }
 
   // An allocate node has separate i_o projections for the uses on the control
@@ -1526,7 +1525,7 @@ void PhaseMacroExpand::expand_allocate_common(
       transform_later(_callprojs.fallthrough_ioproj);
     }
     migrate_outs(_callprojs.catchall_ioproj, _callprojs.fallthrough_ioproj);
-    _igvn.remove_dead_node(_callprojs.catchall_ioproj);
+    _igvn.remove_dead_node(_callprojs.catchall_ioproj, PhaseIterGVN::NodeOrigin::Graph);
   }
 
   // if we generated only a slow call, we are done
@@ -1590,11 +1589,11 @@ void PhaseMacroExpand::yank_alloc_node(AllocateNode* alloc) {
       --i; // back up iterator
     }
     assert(_callprojs.resproj->outcnt() == 0, "all uses must be deleted");
-    _igvn.remove_dead_node(_callprojs.resproj);
+    _igvn.remove_dead_node(_callprojs.resproj, PhaseIterGVN::NodeOrigin::Graph);
   }
   if (_callprojs.fallthrough_catchproj != nullptr) {
     migrate_outs(_callprojs.fallthrough_catchproj, ctrl);
-    _igvn.remove_dead_node(_callprojs.fallthrough_catchproj);
+    _igvn.remove_dead_node(_callprojs.fallthrough_catchproj, PhaseIterGVN::NodeOrigin::Graph);
   }
   if (_callprojs.catchall_catchproj != nullptr) {
     _igvn.rehash_node_delayed(_callprojs.catchall_catchproj);
@@ -1602,16 +1601,16 @@ void PhaseMacroExpand::yank_alloc_node(AllocateNode* alloc) {
   }
   if (_callprojs.fallthrough_proj != nullptr) {
     Node* catchnode = _callprojs.fallthrough_proj->unique_ctrl_out();
-    _igvn.remove_dead_node(catchnode);
-    _igvn.remove_dead_node(_callprojs.fallthrough_proj);
+    _igvn.remove_dead_node(catchnode, PhaseIterGVN::NodeOrigin::Graph);
+    _igvn.remove_dead_node(_callprojs.fallthrough_proj, PhaseIterGVN::NodeOrigin::Graph);
   }
   if (_callprojs.fallthrough_memproj != nullptr) {
     migrate_outs(_callprojs.fallthrough_memproj, mem);
-    _igvn.remove_dead_node(_callprojs.fallthrough_memproj);
+    _igvn.remove_dead_node(_callprojs.fallthrough_memproj, PhaseIterGVN::NodeOrigin::Graph);
   }
   if (_callprojs.fallthrough_ioproj != nullptr) {
     migrate_outs(_callprojs.fallthrough_ioproj, i_o);
-    _igvn.remove_dead_node(_callprojs.fallthrough_ioproj);
+    _igvn.remove_dead_node(_callprojs.fallthrough_ioproj, PhaseIterGVN::NodeOrigin::Graph);
   }
   if (_callprojs.catchall_memproj != nullptr) {
     _igvn.rehash_node_delayed(_callprojs.catchall_memproj);
@@ -1630,7 +1629,7 @@ void PhaseMacroExpand::yank_alloc_node(AllocateNode* alloc) {
     }
   }
 #endif
-  _igvn.remove_dead_node(alloc);
+  _igvn.remove_dead_node(alloc, PhaseIterGVN::NodeOrigin::Graph);
 }
 
 void PhaseMacroExpand::expand_initialize_membar(AllocateNode* alloc, InitializeNode* init,
@@ -1656,7 +1655,16 @@ void PhaseMacroExpand::expand_initialize_membar(AllocateNode* alloc, InitializeN
       // No InitializeNode or no stores captured by zeroing
       // elimination. Simply add the MemBarStoreStore after object
       // initialization.
-      MemBarNode* mb = MemBarNode::make(C, Op_MemBarStoreStore, Compile::AliasIdxBot);
+      // What we want is to prevent the compiler and the CPU from re-ordering the stores that initialize this object
+      // with subsequent stores to any slice. As a consequence, this MemBar should capture the entire memory state at
+      // this point in the IR and produce a new memory state that should cover all slices. However, the Initialize node
+      // only captures/produces a partial memory state making it complicated to insert such a MemBar. Because
+      // re-ordering by the compiler can't happen by construction (a later Store that publishes the just allocated
+      // object reference is indirectly control dependent on the Initialize node), preventing reordering by the CPU is
+      // sufficient. For that a MemBar on the raw memory slice is good enough.
+      // If init is null, this allocation does have an InitializeNode but this logic can't locate it (see comment in
+      // PhaseMacroExpand::initialize_object()).
+      MemBarNode* mb = MemBarNode::make(C, Op_MemBarStoreStore, Compile::AliasIdxRaw);
       transform_later(mb);
 
       mb->init_req(TypeFunc::Memory, fast_oop_rawmem);
@@ -1672,24 +1680,33 @@ void PhaseMacroExpand::expand_initialize_membar(AllocateNode* alloc, InitializeN
       // barrier.
 
       Node* init_ctrl = init->proj_out_or_null(TypeFunc::Control);
-      Node* init_mem = init->proj_out_or_null(TypeFunc::Memory);
 
-      MemBarNode* mb = MemBarNode::make(C, Op_MemBarStoreStore, Compile::AliasIdxBot);
+      // See comment above that explains why a raw memory MemBar is good enough.
+      MemBarNode* mb = MemBarNode::make(C, Op_MemBarStoreStore, Compile::AliasIdxRaw);
       transform_later(mb);
 
       Node* ctrl = new ProjNode(init, TypeFunc::Control);
       transform_later(ctrl);
-      Node* mem = new ProjNode(init, TypeFunc::Memory);
-      transform_later(mem);
+      Node* old_raw_mem_proj = nullptr;
+      auto find_raw_mem = [&](ProjNode* proj) {
+        if (C->get_alias_index(proj->adr_type()) == Compile::AliasIdxRaw) {
+          assert(old_raw_mem_proj == nullptr, "only one expected");
+          old_raw_mem_proj = proj;
+        }
+      };
+      init->for_each_proj(find_raw_mem, TypeFunc::Memory);
+      assert(old_raw_mem_proj != nullptr, "should have found raw mem Proj");
+      Node* raw_mem_proj = new ProjNode(init, TypeFunc::Memory);
+      transform_later(raw_mem_proj);
 
       // The MemBarStoreStore depends on control and memory coming
       // from the InitializeNode
-      mb->init_req(TypeFunc::Memory, mem);
+      mb->init_req(TypeFunc::Memory, raw_mem_proj);
       mb->init_req(TypeFunc::Control, ctrl);
 
       ctrl = new ProjNode(mb, TypeFunc::Control);
       transform_later(ctrl);
-      mem = new ProjNode(mb, TypeFunc::Memory);
+      Node* mem = new ProjNode(mb, TypeFunc::Memory);
       transform_later(mem);
 
       // All nodes that depended on the InitializeNode for control
@@ -1698,9 +1715,7 @@ void PhaseMacroExpand::expand_initialize_membar(AllocateNode* alloc, InitializeN
       if (init_ctrl != nullptr) {
         _igvn.replace_node(init_ctrl, ctrl);
       }
-      if (init_mem != nullptr) {
-        _igvn.replace_node(init_mem, mem);
-      }
+      _igvn.replace_node(old_raw_mem_proj, mem);
     }
   }
 }

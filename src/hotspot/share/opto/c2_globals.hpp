@@ -677,11 +677,18 @@
   develop(bool, TraceIterativeGVN, false,                                   \
           "Print progress during Iterative Global Value Numbering")         \
                                                                             \
+  develop(bool, UseDeepIGVNRevisit, true,                                   \
+          "Re-process nodes that could benefit from a deep revisit after "  \
+          "the IGVN worklist drains")                                       \
+                                                                            \
   develop(uint, VerifyIterativeGVN, 0,                                      \
-          "Verify Iterative Global Value Numbering"                         \
-          "=XY, with Y: verify Def-Use modifications during IGVN"           \
-          "          X: verify that type(n) == n->Value() after IGVN"       \
-          "X and Y in 0=off; 1=on")                                         \
+          "Verify Iterative Global Value Numbering =EDCBA, with:"           \
+          "  E: verify node specific invariants"                            \
+          "  D: verify Node::Identity did not miss opportunities"           \
+          "  C: verify Node::Ideal did not miss opportunities"              \
+          "  B: verify that type(n) == n->Value() after IGVN"               \
+          "  A: verify Def-Use modifications during IGVN"                   \
+          "Each can be 0=off or 1=on")                                      \
           constraint(VerifyIterativeGVNConstraintFunc, AtParse)             \
                                                                             \
   develop(bool, TraceCISCSpill, false,                                      \

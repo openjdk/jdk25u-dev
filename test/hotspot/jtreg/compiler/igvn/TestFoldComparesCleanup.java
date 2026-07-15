@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright Amazon.com Inc. or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,17 +21,36 @@
  * questions.
  */
 
-/*
+/**
  * @test
- * @bug 8238756 8351889
- * @requires vm.debug == true & vm.flavor == "server"
- * @summary Run with -Xcomp to test -XX:VerifyIterativeGVN=11111 in debug builds.
+ * @bug 8375442
+ * @summary fold_compares_helper must clean up speculative lo node when bailing out with deep revisit
+ * @library /test/lib /
+ * @run main/othervm -XX:-TieredCompilation -Xbatch -XX:+IgnoreUnrecognizedVMOptions -XX:VerifyIterativeGVN=1110
+ *                   -XX:CompileCommand=compileonly,${test.main.class}::test
+ *                   ${test.main.class}
  *
- * @run main/othervm/timeout=300 -Xcomp -XX:VerifyIterativeGVN=11111 compiler.c2.TestVerifyIterativeGVN
+ * @run main ${test.main.class}
  */
-package compiler.c2;
+package compiler.igvn;
 
-public class TestVerifyIterativeGVN {
+import jdk.test.lib.Asserts;
+
+public class TestFoldComparesCleanup {
+    // Constants chosen so that fold_compares_helper computes adjusted_lim which overflows negative.
+    static final int A = -2_000_000_000;
+    static final int B =  2_000_000_000;
+
+    static int test(int z) {
+        int sum = 0;
+        if (z > A) sum += 1;
+        if (z < B) sum += 2;
+        return sum;
+    }
+
     public static void main(String[] args) {
+        for (int i = 0; i < 50_000; i++) {
+            Asserts.assertEquals(3, test(i));
+        }
     }
 }

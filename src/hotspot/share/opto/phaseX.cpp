@@ -532,6 +532,10 @@ void PhaseValues::init_con_caches() {
   memset(_zcons,0,sizeof(_zcons));
 }
 
+PhaseIterGVN* PhaseValues::is_IterGVN() {
+  return (_phase == PhaseValuesType::iter_gvn || _phase == PhaseValuesType::ccp) ? static_cast<PhaseIterGVN*>(this) : nullptr;
+}
+
 //--------------------------------find_int_type--------------------------------
 const TypeInt* PhaseValues::find_int_type(Node* n) {
   if (n == nullptr)  return nullptr;
@@ -560,7 +564,7 @@ PhaseValues::~PhaseValues() {
   _table.dump();
   // Statistics for value progress and efficiency
   if( PrintCompilation && Verbose && WizardMode ) {
-    tty->print("\n%sValues: %d nodes ---> %d/%d (%d)",
+    tty->print("\n%sValues: %d nodes ---> " UINT64_FORMAT "/%d (%d)",
       is_IterGVN() ? "Iter" : "    ", C->unique(), made_progress(), made_transforms(), made_new_values());
     if( made_transforms() != 0 ) {
       tty->print_cr("  ratio %f", made_progress()/(float)made_transforms() );
@@ -716,14 +720,14 @@ Node* PhaseGVN::transform(Node* n) {
   }
 
   if (t->singleton() && !k->is_Con()) {
-    NOT_PRODUCT(set_progress();)
+    set_progress();
     return makecon(t);          // Turn into a constant
   }
 
   // Now check for Identities
   i = k->Identity(this);        // Look for a nearby replacement
   if (i != k) {                 // Found? Return replacement!
-    NOT_PRODUCT(set_progress();)
+    set_progress();
     return i;
   }
 
@@ -731,7 +735,7 @@ Node* PhaseGVN::transform(Node* n) {
   i = hash_find_insert(k);      // Insert if new
   if (i && (i != k)) {
     // Return the pre-existing node
-    NOT_PRODUCT(set_progress();)
+    set_progress();
     return i;
   }
 
@@ -802,7 +806,7 @@ void PhaseGVN::dump_infinite_loop_info(Node* n, const char* where) {
 PhaseIterGVN::PhaseIterGVN(PhaseIterGVN* igvn) : _delay_transform(igvn->_delay_transform),
                                                  _worklist(*C->igvn_worklist())
 {
-  _iterGVN = true;
+  _phase = PhaseValuesType::iter_gvn;
   assert(&_worklist == &igvn->_worklist, "sanity");
 }
 
@@ -811,7 +815,7 @@ PhaseIterGVN::PhaseIterGVN(PhaseIterGVN* igvn) : _delay_transform(igvn->_delay_t
 PhaseIterGVN::PhaseIterGVN(PhaseGVN* gvn) : _delay_transform(false),
                                             _worklist(*C->igvn_worklist())
 {
-  _iterGVN = true;
+  _phase = PhaseValuesType::iter_gvn;
   uint max;
 
   // Dead nodes in the hash table inherited from GVN were not treated as
@@ -952,7 +956,7 @@ void PhaseIterGVN::init_verifyPhaseIterGVN() {
 #endif
 }
 
-void PhaseIterGVN::verify_PhaseIterGVN() {
+void PhaseIterGVN::verify_PhaseIterGVN(bool deep_revisit_converged) {
 #ifdef ASSERT
   // Verify nodes with changed inputs.
   Unique_Node_List* modified_list = C->modified_nodes();
@@ -985,7 +989,7 @@ void PhaseIterGVN::verify_PhaseIterGVN() {
     }
   }
 
-  verify_optimize();
+  verify_optimize(deep_revisit_converged);
 #endif
 }
 #endif /* PRODUCT */
@@ -1015,38 +1019,54 @@ void PhaseIterGVN::trace_PhaseIterGVN_verbose(Node* n, int num_processed) {
 }
 #endif /* ASSERT */
 
-void PhaseIterGVN::optimize() {
-  DEBUG_ONLY(uint num_processed  = 0;)
-  NOT_PRODUCT(init_verifyPhaseIterGVN();)
-  NOT_PRODUCT(C->reset_igv_phase_iter(PHASE_AFTER_ITER_GVN_STEP);)
-  C->print_method(PHASE_BEFORE_ITER_GVN, 3);
-  if (StressIGVN) {
-    shuffle_worklist();
+bool PhaseIterGVN::needs_deep_revisit(const Node* n) const {
+  // LoadNode::Value() -> can_see_stored_value() walks up through many memory
+  // nodes. LoadNode::Ideal() -> find_previous_store() also walks up to 50
+  // nodes through stores and arraycopy nodes.
+  if (n->is_Load()) {
+    return true;
   }
+  // CmpPNode::sub() -> detect_ptr_independence() -> all_controls_dominate()
+  // walks CFG dominator relationships extensively. This only triggers when
+  // both inputs are oop pointers (subnode.cpp:984).
+  if (n->Opcode() == Op_CmpP) {
+    const Type* t1 = type_or_null(n->in(1));
+    const Type* t2 = type_or_null(n->in(2));
+    return t1 != nullptr && t1->isa_oopptr() &&
+           t2 != nullptr && t2->isa_oopptr();
+  }
+  // IfNode::Ideal() -> search_identical() walks up the CFG dominator tree.
+  // RangeCheckNode::Ideal() scans up to ~999 nodes up the chain.
+  // CountedLoopEndNode/LongCountedLoopEndNode::Ideal() via simple_subsuming
+  // looks for dominating test that subsumes the current test.
+  switch (n->Opcode()) {
+  case Op_If:
+  case Op_RangeCheck:
+  case Op_CountedLoopEnd:
+  case Op_LongCountedLoopEnd:
+    return true;
+  default:
+    break;
+  }
+  return false;
+}
 
-  // The node count check in the loop below (check_node_count) assumes that we
-  // increase the live node count with at most
-  // max_live_nodes_increase_per_iteration in between checks. If this
-  // assumption does not hold, there is a risk that we exceed the max node
-  // limit in between checks and trigger an assert during node creation.
+bool PhaseIterGVN::drain_worklist() {
+  uint loop_count = 1;
   const int max_live_nodes_increase_per_iteration = NodeLimitFudgeFactor * 3;
-
-  uint loop_count = 0;
-  // Pull from worklist and transform the node. If the node has changed,
-  // update edge info and put uses on worklist.
-  while (_worklist.size() > 0) {
+  while (_worklist.size() != 0) {
     if (C->check_node_count(max_live_nodes_increase_per_iteration, "Out of nodes")) {
       C->print_method(PHASE_AFTER_ITER_GVN, 3);
-      return;
+      return true;
     }
     Node* n  = _worklist.pop();
     if (loop_count >= K * C->live_nodes()) {
-      DEBUG_ONLY(dump_infinite_loop_info(n, "PhaseIterGVN::optimize");)
-      C->record_method_not_compilable("infinite loop in PhaseIterGVN::optimize");
+      DEBUG_ONLY(dump_infinite_loop_info(n, "PhaseIterGVN::drain_worklist");)
+      C->record_method_not_compilable("infinite loop in PhaseIterGVN::drain_worklist");
       C->print_method(PHASE_AFTER_ITER_GVN, 3);
-      return;
+      return true;
     }
-    DEBUG_ONLY(trace_PhaseIterGVN_verbose(n, num_processed++);)
+    DEBUG_ONLY(trace_PhaseIterGVN_verbose(n, _num_processed++);)
     if (n->outcnt() != 0) {
       NOT_PRODUCT(const Type* oldtype = type_or_null(n));
       // Do the transformation
@@ -1054,7 +1074,7 @@ void PhaseIterGVN::optimize() {
       Node* nn = transform_old(n);
       DEBUG_ONLY(int live_nodes_after = C->live_nodes();)
       // Ensure we did not increase the live node count with more than
-      // max_live_nodes_increase_per_iteration during the call to transform_old
+      // max_live_nodes_increase_per_iteration during the call to transform_old.
       DEBUG_ONLY(int increase = live_nodes_after - live_nodes_before;)
       assert(increase < max_live_nodes_increase_per_iteration,
              "excessive live node increase in single iteration of IGVN: %d "
@@ -1062,25 +1082,145 @@ void PhaseIterGVN::optimize() {
              increase, max_live_nodes_increase_per_iteration);
       NOT_PRODUCT(trace_PhaseIterGVN(n, nn, oldtype);)
     } else if (!n->is_top()) {
-      remove_dead_node(n);
+      remove_dead_node(n, NodeOrigin::Graph);
     }
     loop_count++;
   }
-  NOT_PRODUCT(verify_PhaseIterGVN();)
+  return false;
+}
+
+void PhaseIterGVN::push_deep_revisit_candidates() {
+  ResourceMark rm;
+  Unique_Node_List all_nodes;
+  all_nodes.push(C->root());
+  for (uint j = 0; j < all_nodes.size(); j++) {
+    Node* n = all_nodes.at(j);
+    if (needs_deep_revisit(n)) {
+      _worklist.push(n);
+    }
+    for (DUIterator_Fast imax, i = n->fast_outs(imax); i < imax; i++) {
+      all_nodes.push(n->fast_out(i));
+    }
+  }
+}
+
+bool PhaseIterGVN::deep_revisit() {
+  // Re-process nodes that inspect the graph deeply. After the main worklist drains, walk
+  // the graph to find all live deep-inspection nodes and push them to the worklist
+  // for re-evaluation. If any produce changes, drain the worklist again.
+  // Repeat until stable. This mirrors PhaseCCP::analyze()'s revisit loop.
+  const uint max_deep_revisit_rounds = 10; // typically converges in <2 rounds
+  uint round = 0;
+  for (; round < max_deep_revisit_rounds; round++) {
+    push_deep_revisit_candidates();
+    if (_worklist.size() == 0) {
+      break; // No deep-inspection nodes to revisit, done.
+    }
+
+#ifndef PRODUCT
+    uint candidates = _worklist.size();
+    uint n_if = 0; uint n_rc = 0; uint n_load = 0; uint n_cmpp = 0; uint n_cle = 0; uint n_lcle = 0;
+    if (TraceIterativeGVN) {
+      for (uint i = 0; i < _worklist.size(); i++) {
+        Node* n = _worklist.at(i);
+        switch (n->Opcode()) {
+        case Op_If:                 n_if++;   break;
+        case Op_RangeCheck:         n_rc++;   break;
+        case Op_CountedLoopEnd:     n_cle++;  break;
+        case Op_LongCountedLoopEnd: n_lcle++; break;
+        case Op_CmpP:               n_cmpp++; break;
+        default: if (n->is_Load())  n_load++; break;
+        }
+      }
+    }
+#endif
+
+    // Convergence: if the drain does not make progress (no Ideal, Value, Identity or GVN changes),
+    // we are at a fixed point. We use made_progress() rather than live_nodes because live_nodes
+    // misses non-structural changes like a LoadNode dropping its control input.
+    uint progress_before = made_progress();
+    if (drain_worklist()) {
+      return false;
+    }
+    uint progress = made_progress() - progress_before;
+
+#ifndef PRODUCT
+    if (TraceIterativeGVN) {
+      tty->print("deep_revisit round %u: %u candidates (If=%u RC=%u Load=%u CmpP=%u CLE=%u LCLE=%u), progress=%u (%s)",
+                 round, candidates, n_if, n_rc, n_load, n_cmpp, n_cle, n_lcle, progress, progress != 0 ? "changed" : "converged");
+      if (C->method() != nullptr) {
+        tty->print(", ");
+        C->method()->print_short_name(tty);
+      }
+      tty->cr();
+    }
+#endif
+
+    if (progress == 0) {
+      break;
+    }
+  }
+  return round < max_deep_revisit_rounds;
+}
+
+void PhaseIterGVN::optimize(bool deep) {
+  bool deep_revisit_converged = false;
+  DEBUG_ONLY(_num_processed = 0;)
+  NOT_PRODUCT(init_verifyPhaseIterGVN();)
+  NOT_PRODUCT(C->reset_igv_phase_iter(PHASE_AFTER_ITER_GVN_STEP);)
+  C->print_method(PHASE_BEFORE_ITER_GVN, 3);
+  if (StressIGVN) {
+    shuffle_worklist();
+  }
+
+  // Pull from worklist and transform the node.
+  if (drain_worklist()) {
+    return;
+  }
+
+  if (deep && UseDeepIGVNRevisit) {
+    deep_revisit_converged = deep_revisit();
+    if (C->failing()) {
+      return;
+    }
+  }
+
+  NOT_PRODUCT(verify_PhaseIterGVN(deep_revisit_converged);)
   C->print_method(PHASE_AFTER_ITER_GVN, 3);
 }
 
 #ifdef ASSERT
-void PhaseIterGVN::verify_optimize() {
-  if (is_verify_Value()) {
+void PhaseIterGVN::verify_optimize(bool deep_revisit_converged) {
+  assert(_worklist.size() == 0, "igvn worklist must be empty before verify");
+
+  if (is_verify_Value() ||
+      is_verify_Ideal() ||
+      is_verify_Identity() ||
+      is_verify_invariants()) {
     ResourceMark rm;
     Unique_Node_List worklist;
-    bool failure = false;
     // BFS all nodes, starting at root
     worklist.push(C->root());
     for (uint j = 0; j < worklist.size(); ++j) {
       Node* n = worklist.at(j);
-      failure |= verify_node_value(n);
+      // If we get an assert here, check why the reported node was not processed again in IGVN.
+      // We should either make sure that this node is properly added back to the IGVN worklist
+      // in PhaseIterGVN::add_users_to_worklist to update it again or add an exception
+      // in the verification methods below if that is not possible for some reason (like Load nodes).
+      if (is_verify_Value()) {
+        verify_Value_for(n, deep_revisit_converged /* strict */);
+      }
+      if (is_verify_Ideal()) {
+        verify_Ideal_for(n, false /* can_reshape */, deep_revisit_converged);
+        verify_Ideal_for(n, true  /* can_reshape */, deep_revisit_converged);
+      }
+      if (is_verify_Identity()) {
+        verify_Identity_for(n);
+      }
+      if (is_verify_invariants()) {
+        verify_node_invariants_for(n);
+      }
+
       // traverse all inputs and outputs
       for (uint i = 0; i < n->req(); i++) {
         if (n->in(i) != nullptr) {
@@ -1091,26 +1231,42 @@ void PhaseIterGVN::verify_optimize() {
         worklist.push(n->fast_out(i));
       }
     }
-    // If we get this assert, check why the reported nodes were not processed again in IGVN.
-    // We should either make sure that these nodes are properly added back to the IGVN worklist
-    // in PhaseIterGVN::add_users_to_worklist to update them again or add an exception
-    // in the verification code above if that is not possible for some reason (like Load nodes).
-    assert(!failure, "Missed optimization opportunity in PhaseIterGVN");
   }
+
+  verify_empty_worklist(nullptr);
 }
 
-// Check that type(n) == n->Value(), return true if we have a failure.
+void PhaseIterGVN::verify_empty_worklist(Node* node) {
+  // Verify that the igvn worklist is empty. If no optimization happened, then
+  // nothing needs to be on the worklist.
+  if (_worklist.size() == 0) { return; }
+
+  stringStream ss; // Print as a block without tty lock.
+  for (uint j = 0; j < _worklist.size(); j++) {
+    Node* n = _worklist.at(j);
+    ss.print("igvn.worklist[%d] ", j);
+    n->dump("\n", false, &ss);
+  }
+  if (_worklist.size() != 0 && node != nullptr) {
+    ss.print_cr("Previously optimized:");
+    node->dump("\n", false, &ss);
+  }
+  tty->print_cr("%s", ss.as_string());
+  assert(false, "igvn worklist must still be empty after verify");
+}
+
+// Check that type(n) == n->Value(), asserts if we have a failure.
 // We have a list of exceptions, see detailed comments in code.
 // (1) Integer "widen" changes, but the range is the same.
 // (2) LoadNode performs deep traversals. Load is not notified for changes far away.
 // (3) CmpPNode performs deep traversals if it compares oopptr. CmpP is not notified for changes far away.
-bool PhaseIterGVN::verify_node_value(Node* n) {
+void PhaseIterGVN::verify_Value_for(const Node* n, bool strict) {
   // If we assert inside type(n), because the type is still a null, then maybe
   // the node never went through gvn.transform, which would be a bug.
   const Type* told = type(n);
   const Type* tnew = n->Value(this);
   if (told == tnew) {
-    return false;
+    return;
   }
   // Exception (1)
   // Integer "widen" changes, but range is the same.
@@ -1119,7 +1275,7 @@ bool PhaseIterGVN::verify_node_value(Node* n) {
     const TypeInteger* t1 = tnew->is_integer(tnew->basic_type());
     if (t0->lo_as_long() == t1->lo_as_long() &&
         t0->hi_as_long() == t1->hi_as_long()) {
-      return false; // ignore integer widen
+      return; // ignore integer widen
     }
   }
   // Exception (2)
@@ -1128,7 +1284,7 @@ bool PhaseIterGVN::verify_node_value(Node* n) {
     // MemNode::can_see_stored_value looks up through many memory nodes,
     // which means we would need to notify modifications from far up in
     // the inputs all the way down to the LoadNode. We don't do that.
-    return false;
+    return;
   }
   // Exception (3)
   // CmpPNode performs deep traversals if it compares oopptr. CmpP is not notified for changes far away.
@@ -1144,21 +1300,881 @@ bool PhaseIterGVN::verify_node_value(Node* n) {
     // control sub of the allocation. The problems is that sometimes dominates answers
     // false conservatively, and later it can determine that it is indeed true. Loops with
     // Region heads can lead to giving up, whereas LoopNodes can be skipped easier, and
-    // so the traversal becomes more powerful. This is difficult to remidy, we would have
+    // so the traversal becomes more powerful. This is difficult to remedy, we would have
     // to notify the CmpP of CFG updates. Luckily, we recompute CmpP::Value during CCP
     // after loop-opts, so that should take care of many of these cases.
-    return false;
+    return;
   }
-  tty->cr();
-  tty->print_cr("Missed Value optimization:");
-  n->dump_bfs(1, nullptr, "");
-  tty->print_cr("Current type:");
-  told->dump_on(tty);
-  tty->cr();
-  tty->print_cr("Optimized type:");
-  tnew->dump_on(tty);
-  tty->cr();
-  return true;
+
+  stringStream ss; // Print as a block without tty lock.
+  ss.cr();
+  ss.print_cr("Missed Value optimization:");
+  n->dump_bfs(1, nullptr, "", &ss);
+  ss.print_cr("Current type:");
+  told->dump_on(&ss);
+  ss.cr();
+  ss.print_cr("Optimized type:");
+  tnew->dump_on(&ss);
+  ss.cr();
+  tty->print_cr("%s", ss.as_string());
+
+  switch (_phase) {
+    case PhaseValuesType::iter_gvn:
+      assert(false, "Missed Value optimization opportunity in PhaseIterGVN for %s",n->Name());
+      break;
+    case PhaseValuesType::ccp:
+      assert(false, "PhaseCCP not at fixpoint: analysis result may be unsound for %s", n->Name());
+      break;
+    default:
+      assert(false, "Unexpected phase");
+      break;
+  }
+}
+
+// Check that all Ideal optimizations that could be done were done.
+// Asserts if it found missed optimization opportunities or encountered unexpected changes, and
+//         returns normally otherwise (no missed optimization, or skipped verification).
+void PhaseIterGVN::verify_Ideal_for(Node* n, bool can_reshape, bool deep_revisit_converged) {
+  if (!deep_revisit_converged && needs_deep_revisit(n)) {
+    return;
+  }
+
+  // First, we check a list of exceptions, where we skip verification,
+  // because there are known cases where Ideal can optimize after IGVN.
+  // Some may be expected and cannot be fixed, and others should be fixed.
+  switch (n->Opcode()) {
+    // RegionNode::Ideal does "Skip around the useless IF diamond".
+    //   245  IfTrue  === 244
+    //   258  If  === 245 257
+    //   259  IfTrue  === 258  [[ 263 ]]
+    //   260  IfFalse  === 258  [[ 263 ]]
+    //   263  Region  === 263 260 259  [[ 263 268 ]]
+    // to
+    //   245  IfTrue  === 244
+    //   263  Region  === 263 245 _  [[ 263 268 ]]
+    //
+    // "Useless" means that there is no code in either branch of the If.
+    // I found a case where this was not done yet during IGVN.
+    // Why does the Region not get added to IGVN worklist when the If diamond becomes useless?
+    //
+    // Found with:
+    //   java -XX:VerifyIterativeGVN=0100 -Xcomp --version
+    case Op_Region:
+      return;
+
+    // In AddNode::Ideal, we call "commute", which swaps the inputs so
+    // that smaller idx are first. Tracking it back, it led me to
+    // PhaseIdealLoop::remix_address_expressions which swapped the edges.
+    //
+    // Example:
+    //   Before PhaseIdealLoop::remix_address_expressions
+    //     154  AddI  === _ 12 144
+    //   After PhaseIdealLoop::remix_address_expressions
+    //     154  AddI  === _ 144 12
+    //   After AddNode::Ideal
+    //     154  AddI  === _ 12 144
+    //
+    // I suspect that the node should be added to the IGVN worklist after
+    // PhaseIdealLoop::remix_address_expressions
+    //
+    // This is the only case I looked at, there may be others. Found like this:
+    //   java -XX:VerifyIterativeGVN=0100 -Xbatch --version
+    //
+    // The following hit the same logic in PhaseIdealLoop::remix_address_expressions.
+    //
+    // Note: currently all of these fail also for other reasons, for example
+    // because of "commute" doing the reordering with the phi below. Once
+    // that is resolved, we can come back to this issue here.
+    //
+    // case Op_AddD:
+    // case Op_AddI:
+    // case Op_AddL:
+    // case Op_AddF:
+    // case Op_MulI:
+    // case Op_MulL:
+    // case Op_MulF:
+    // case Op_MulD:
+    //   if (n->in(1)->_idx > n->in(2)->_idx) {
+    //     // Expect "commute" to revert this case.
+    //     return false;
+    //   }
+    //   break; // keep verifying
+
+    // AddFNode::Ideal calls "commute", which can reorder the inputs for this:
+    //   Check for tight loop increments: Loop-phi of Add of loop-phi
+    // It wants to take the phi into in(1):
+    //    471  Phi  === 435 38 390
+    //    390  AddF  === _ 471 391
+    //
+    // Other Associative operators are also affected equally.
+    //
+    // Investigate why this does not happen earlier during IGVN.
+    //
+    // Found with:
+    //   test/hotspot/jtreg/compiler/loopopts/superword/ReductionPerf.java
+    //   -XX:VerifyIterativeGVN=1110
+    case Op_AddD:
+    //case Op_AddI: // Also affected for other reasons, see case further down.
+    //case Op_AddL: // Also affected for other reasons, see case further down.
+    case Op_AddF:
+    case Op_MulI:
+    case Op_MulL:
+    case Op_MulF:
+    case Op_MulD:
+    case Op_MinF:
+    case Op_MinD:
+    case Op_MaxF:
+    case Op_MaxD:
+    // XorINode::Ideal
+    // Found with:
+    //   compiler/intrinsics/chacha/TestChaCha20.java
+    //   -XX:VerifyIterativeGVN=1110
+    case Op_XorI:
+    case Op_XorL:
+    // It seems we may have similar issues with the HF cases.
+    // Found with aarch64:
+    //   compiler/vectorization/TestFloat16VectorOperations.java
+    //   -XX:VerifyIterativeGVN=1110
+    case Op_AddHF:
+    case Op_MulHF:
+    case Op_MaxHF:
+    case Op_MinHF:
+      return;
+
+    // In MulNode::Ideal the edges can be swapped to help value numbering:
+    //
+    //    // We are OK if right is a constant, or right is a load and
+    //    // left is a non-constant.
+    //    if( !(t2->singleton() ||
+    //          (in(2)->is_Load() && !(t1->singleton() || in(1)->is_Load())) ) ) {
+    //      if( t1->singleton() ||       // Left input is a constant?
+    //          // Otherwise, sort inputs (commutativity) to help value numbering.
+    //          (in(1)->_idx > in(2)->_idx) ) {
+    //        swap_edges(1, 2);
+    //
+    // Why was this not done earlier during IGVN?
+    //
+    // Found with:
+    //    test/hotspot/jtreg/gc/stress/gcbasher/TestGCBasherWithG1.java
+    //    -XX:VerifyIterativeGVN=1110
+    case Op_AndI:
+    // Same for AndL.
+    // Found with:
+    //   compiler/intrinsics/bigInteger/MontgomeryMultiplyTest.java
+    //    -XX:VerifyIterativeGVN=1110
+    case Op_AndL:
+      return;
+
+    // SubLNode::Ideal does transform like:
+    //   Convert "c1 - (y+c0)" into "(c1-c0) - y"
+    //
+    // In IGVN before verification:
+    //   8423  ConvI2L  === _ 3519  [[ 8424 ]]  #long:-2
+    //   8422  ConvI2L  === _ 8399  [[ 8424 ]]  #long:3..256:www
+    //   8424  AddL  === _ 8422 8423  [[ 8383 ]]  !orig=[8382]
+    //   8016  ConL  === 0  [[ 8383 ]]  #long:0
+    //   8383  SubL  === _ 8016 8424  [[ 8156 ]]  !orig=[8154]
+    //
+    // And then in verification:
+    //   8338  ConL  === 0  [[ 8339 8424 ]]  #long:-2     <----- Was constant folded.
+    //   8422  ConvI2L  === _ 8399  [[ 8424 ]]  #long:3..256:www
+    //   8424  AddL  === _ 8422 8338  [[ 8383 ]]  !orig=[8382]
+    //   8016  ConL  === 0  [[ 8383 ]]  #long:0
+    //   8383  SubL  === _ 8016 8424  [[ 8156 ]]  !orig=[8154]
+    //
+    // So the form changed from:
+    //   c1 - (y + [8423  ConvI2L])
+    // to
+    //   c1 - (y + -2)
+    // but the SubL was not added to the IGVN worklist. Investigate why.
+    // There could be other issues too.
+    //
+    // There seems to be a related AddL IGVN optimization that triggers
+    // the same SubL optimization, so investigate that too.
+    //
+    // Found with:
+    //   java -XX:VerifyIterativeGVN=0100 -Xcomp --version
+    case Op_SubL:
+      return;
+
+    // SubINode::Ideal does
+    // Convert "x - (y+c0)" into "(x-y) - c0" AND
+    // Convert "c1 - (y+c0)" into "(c1-c0) - y"
+    //
+    // Investigate why this does not yet happen during IGVN.
+    //
+    // Found with:
+    //   test/hotspot/jtreg/compiler/c2/IVTest.java
+    //   -XX:VerifyIterativeGVN=1110
+    case Op_SubI:
+      return;
+
+    // AddNode::IdealIL does transform like:
+    //   Convert x + (con - y) into "(x - y) + con"
+    //
+    // In IGVN before verification:
+    //   8382  ConvI2L
+    //   8381  ConvI2L  === _ 791  [[ 8383 ]]  #long:0
+    //   8383  SubL  === _ 8381 8382
+    //   8168  ConvI2L
+    //   8156  AddL  === _ 8168 8383  [[ 8158 ]]
+    //
+    // And then in verification:
+    //   8424  AddL
+    //   8016  ConL  === 0  [[ 8383 ]]  #long:0  <--- Was constant folded.
+    //   8383  SubL  === _ 8016 8424
+    //   8168  ConvI2L
+    //   8156  AddL  === _ 8168 8383  [[ 8158 ]]
+    //
+    // So the form changed from:
+    //   x + (ConvI2L(0) - [8382  ConvI2L])
+    // to
+    //   x + (0 - [8424  AddL])
+    // but the AddL was not added to the IGVN worklist. Investigate why.
+    // There could be other issues, too. For example with "commute", see above.
+    //
+    // Found with:
+    //   java -XX:VerifyIterativeGVN=0100 -Xcomp --version
+    case Op_AddL:
+      return;
+
+    // SubTypeCheckNode::Ideal calls SubTypeCheckNode::verify_helper, which does
+    //   Node* cmp = phase->transform(new CmpPNode(subklass, in(SuperKlass)));
+    //   record_for_cleanup(cmp, phase);
+    // This verification code in the Ideal code creates new nodes, and checks
+    // if they fold in unexpected ways. This means some nodes are created and
+    // added to the worklist, even if the SubTypeCheck is not optimized. This
+    // goes agains the assumption of the verification here, which assumes that
+    // if the node is not optimized, then no new nodes should be created, and
+    // also no nodes should be added to the worklist.
+    // I see two options:
+    //  1) forbid what verify_helper does, because for each Ideal call it
+    //     uses memory and that is suboptimal. But it is not clear how that
+    //     verification can be done otherwise.
+    //  2) Special case the verification here. Probably the new nodes that
+    //     were just created are dead, i.e. they are not connected down to
+    //     root. We could verify that, and remove those nodes from the graph
+    //     by setting all their inputs to nullptr. And of course we would
+    //     have to remove those nodes from the worklist.
+    // Maybe there are other options too, I did not dig much deeper yet.
+    //
+    // Found with:
+    //   java -XX:VerifyIterativeGVN=0100 -Xbatch --version
+    case Op_SubTypeCheck:
+      return;
+
+    // LoopLimitNode::Ideal when stride is constant power-of-2, we can do a lowering
+    // to other nodes: Conv, Add, Sub, Mul, And ...
+    //
+    //  107  ConI  === 0  [[ ... ]]  #int:2
+    //   84  LoadRange  === _ 7 83
+    //   50  ConI  === 0  [[ ... ]]  #int:0
+    //  549  LoopLimit  === _ 50 84 107
+    //
+    // I stepped backward, to see how the node was generated, and I found that it was
+    // created in PhaseIdealLoop::exact_limit and not changed since. It is added to the
+    // IGVN worklist. I quickly checked when it goes into LoopLimitNode::Ideal after
+    // that, and it seems we want to skip lowering it until after loop-opts, but never
+    // add call record_for_post_loop_opts_igvn. This would be an easy fix, but there
+    // could be other issues too.
+    //
+    // Fond with:
+    //   java -XX:VerifyIterativeGVN=0100 -Xcomp --version
+    case Op_LoopLimit:
+      return;
+
+    // PhiNode::Ideal calls split_flow_path, which tries to do this:
+    // "This optimization tries to find two or more inputs of phi with the same constant
+    // value. It then splits them into a separate Phi, and according Region."
+    //
+    // Example:
+    //   130  DecodeN  === _ 129
+    //    50  ConP  === 0  [[ 18 91 99 18 ]]  #null
+    //    18  Phi  === 14 50 130 50  [[ 133 ]]  #java/lang/Object *  Oop:java/lang/Object *
+    //
+    //  turns into:
+    //
+    //    50  ConP  === 0  [[ 99 91 18 ]]  #null
+    //   130  DecodeN  === _ 129  [[ 18 ]]
+    //    18  Phi  === 14 130 50  [[ 133 ]]  #java/lang/Object *  Oop:java/lang/Object *
+    //
+    // We would have to investigate why this optimization does not happen during IGVN.
+    // There could also be other issues - I did not investigate further yet.
+    //
+    // Found with:
+    //   java -XX:VerifyIterativeGVN=0100 -Xcomp --version
+    case Op_Phi:
+      return;
+
+    // MemBarNode::Ideal does "Eliminate volatile MemBars for scalar replaced objects".
+    // For examle "The allocated object does not escape".
+    //
+    // It seems the difference to earlier calls to MemBarNode::Ideal, is that there
+    // alloc->as_Allocate()->does_not_escape_thread() returned false, but in verification
+    // it returned true. Why does the MemBarStoreStore not get added to the IGVN
+    // worklist when this change happens?
+    //
+    // Found with:
+    //   java -XX:VerifyIterativeGVN=0100 -Xcomp --version
+    case Op_MemBarStoreStore:
+      return;
+
+    // ConvI2LNode::Ideal converts
+    //   648  AddI  === _ 583 645  [[ 661 ]]
+    //   661  ConvI2L  === _ 648  [[ 664 ]]  #long:0..maxint-1:www
+    // into
+    //   772  ConvI2L  === _ 645  [[ 773 ]]  #long:-120..maxint-61:www
+    //   771  ConvI2L  === _ 583  [[ 773 ]]  #long:60..120:www
+    //   773  AddL  === _ 771 772  [[ ]]
+    //
+    // We have to investigate why this does not happen during IGVN in this case.
+    // There could also be other issues - I did not investigate further yet.
+    //
+    // Found with:
+    //   java -XX:VerifyIterativeGVN=0100 -Xcomp --version
+    case Op_ConvI2L:
+      return;
+
+    // AddNode::IdealIL can do this transform (and similar other ones):
+    //   Convert "a*b+a*c into a*(b+c)
+    // The example had AddI(MulI(a, b), MulI(a, c)). Why did this not happen
+    // during IGVN? There was a mutation for one of the MulI, and only
+    // after that the pattern was as needed for the optimization. The MulI
+    // was added to the IGVN worklist, but not the AddI. This probably
+    // can be fixed by adding the correct pattern in add_users_of_use_to_worklist.
+    //
+    // Found with:
+    //   test/hotspot/jtreg/compiler/loopopts/superword/ReductionPerf.java
+    //   -XX:VerifyIterativeGVN=1110
+    case Op_AddI:
+      return;
+
+    // ArrayCopyNode::Ideal
+    //    calls ArrayCopyNode::prepare_array_copy
+    //    calls Compile::conv_I2X_index        -> is called with sizetype = intcon(0), I think that
+    //                                            is not expected, and we create a range int:0..-1
+    //    calls Compile::constrained_convI2L   -> creates ConvI2L(intcon(1), int:0..-1)
+    //                                            note: the type is already empty!
+    //    calls PhaseIterGVN::transform
+    //    calls PhaseIterGVN::transform_old
+    //    calls PhaseIterGVN::subsume_node     -> subsume ConvI2L with TOP
+    //    calls Unique_Node_List::push         -> pushes TOP to worklist
+    //
+    // Once we get back to ArrayCopyNode::prepare_array_copy, we get back TOP, and
+    // return false. This means we eventually return nullptr from ArrayCopyNode::Ideal.
+    //
+    // Question: is it ok to push anything to the worklist during ::Ideal, if we will
+    //           return nullptr, indicating nothing happened?
+    //           Is it smart to do transform in Compile::constrained_convI2L, and then
+    //           check for TOP in calls ArrayCopyNode::prepare_array_copy?
+    //           Should we just allow TOP to land on the worklist, as an exception?
+    //
+    // Found with:
+    //   compiler/arraycopy/TestArrayCopyAsLoadsStores.java
+    //   -XX:VerifyIterativeGVN=1110
+    case Op_ArrayCopy:
+      return;
+
+    // CastLLNode::Ideal
+    //    calls ConstraintCastNode::optimize_integer_cast -> pushes CastLL through SubL
+    //
+    // Could be a notification issue, where updates inputs of CastLL do not notify
+    // down through SubL to CastLL.
+    //
+    // Found With:
+    //   compiler/c2/TestMergeStoresMemorySegment.java#byte-array
+    //   -XX:VerifyIterativeGVN=1110
+    case Op_CastLL:
+      return;
+
+    // Similar case happens to CastII
+    //
+    // Found With:
+    //   compiler/c2/TestScalarReplacementMaxLiveNodes.java
+    //   -XX:VerifyIterativeGVN=1110
+    case Op_CastII:
+      return;
+
+    // MaxLNode::Ideal
+    //   calls AddNode::Ideal
+    //   calls commute -> decides to swap edges
+    //
+    // Another notification issue, because we check inputs of inputs?
+    // MaxL -> Phi -> Loop
+    // MaxL -> Phi -> MaxL
+    //
+    // Found with:
+    //   compiler/c2/irTests/TestIfMinMax.java
+    //   -XX:VerifyIterativeGVN=1110
+    case Op_MaxL:
+    case Op_MinL:
+      return;
+
+    // OrINode::Ideal
+    //   calls AddNode::Ideal
+    //   calls commute -> left is Load, right not -> commute.
+    //
+    // Not sure why notification does not work here, seems like
+    // the depth is only 1, so it should work. Needs investigation.
+    //
+    // Found with:
+    //   compiler/codegen/TestCharVect2.java#id0
+    //   -XX:VerifyIterativeGVN=1110
+    case Op_OrI:
+    case Op_OrL:
+      return;
+
+    // Bool -> constant folded to 1.
+    // Issue with notification?
+    //
+    // Found with:
+    //   compiler/c2/irTests/TestVectorizationMismatchedAccess.java
+    //   -XX:VerifyIterativeGVN=1110
+    case Op_Bool:
+      return;
+
+    // LShiftLNode::Ideal
+    // Looks at pattern: "(x + x) << c0", converts it to "x << (c0 + 1)"
+    // Probably a notification issue.
+    //
+    // Found with:
+    //   compiler/conversions/TestMoveConvI2LOrCastIIThruAddIs.java
+    //   -ea -esa -XX:CompileThreshold=100 -XX:+UnlockExperimentalVMOptions -server -XX:-TieredCompilation -XX:+IgnoreUnrecognizedVMOptions -XX:VerifyIterativeGVN=1110
+    case Op_LShiftL:
+      return;
+
+    // LShiftINode::Ideal
+    // pattern: ((x + con1) << con2) -> x << con2 + con1 << con2
+    // Could be issue with notification of inputs of inputs
+    //
+    // Side-note: should cases like these not be shared between
+    //            LShiftI and LShiftL?
+    //
+    // Found with:
+    //   compiler/escapeAnalysis/Test6689060.java
+    //   -XX:+IgnoreUnrecognizedVMOptions -XX:VerifyIterativeGVN=1110 -ea -esa -XX:CompileThreshold=100 -XX:+UnlockExperimentalVMOptions -server -XX:-TieredCompilation -XX:+IgnoreUnrecognizedVMOptions -XX:VerifyIterativeGVN=1110
+    case Op_LShiftI:
+      return;
+
+    // AddPNode::Ideal seems to do set_req without removing lock first.
+    // Found with various vector tests tier1-tier3.
+    case Op_AddP:
+      return;
+
+    // StrIndexOfNode::Ideal
+    // Found in tier1-3.
+    case Op_StrIndexOf:
+    case Op_StrIndexOfChar:
+      return;
+
+    // StrEqualsNode::Identity
+    //
+    // Found (linux x64 only?) with:
+    //   serviceability/sa/ClhsdbThreadContext.java
+    //   -XX:+UnlockExperimentalVMOptions -XX:LockingMode=1 -XX:+IgnoreUnrecognizedVMOptions -XX:VerifyIterativeGVN=1110
+    case Op_StrEquals:
+      return;
+
+    // AryEqNode::Ideal
+    // Not investigated. Reshapes itself and adds lots of nodes to the worklist.
+    //
+    // Found with:
+    //   vmTestbase/vm/mlvm/meth/stress/compiler/i2c_c2i/Test.java
+    //   -XX:+UnlockDiagnosticVMOptions -XX:-TieredCompilation -XX:+StressUnstableIfTraps -XX:+IgnoreUnrecognizedVMOptions -XX:VerifyIterativeGVN=1110
+    case Op_AryEq:
+      return;
+
+    // MergeMemNode::Ideal
+    // Found in tier1-3. Did not investigate further yet.
+    case Op_MergeMem:
+      return;
+
+    // URShiftINode::Ideal
+    // Found in tier1-3. Did not investigate further yet.
+    case Op_URShiftI:
+      return;
+
+    // CMoveINode::Ideal
+    // Found in tier1-3. Did not investigate further yet.
+    case Op_CMoveI:
+      return;
+
+    // CmpPNode::Ideal calls isa_const_java_mirror
+    // and generates new constant nodes, even if no progress is made.
+    // We can probably rewrite this so that only types are generated.
+    // It seems that object types are not hashed, we could investigate
+    // if that is an option as well.
+    //
+    // Found with:
+    //   java -XX:VerifyIterativeGVN=1110 -Xcomp --version
+    case Op_CmpP:
+      return;
+
+    // MinINode::Ideal
+    // Did not investigate, but there are some patterns that might
+    // need more notification.
+    case Op_MinI:
+    case Op_MaxI: // preemptively removed it as well.
+      return;
+  }
+
+  if (n->is_Store()) {
+    // StoreNode::Ideal can do this:
+    //  // Capture an unaliased, unconditional, simple store into an initializer.
+    //  // Or, if it is independent of the allocation, hoist it above the allocation.
+    // That replaces the Store with a MergeMem.
+    //
+    // We have to investigate why this does not happen during IGVN in this case.
+    // There could also be other issues - I did not investigate further yet.
+    //
+    // Found with:
+    //   java -XX:VerifyIterativeGVN=0100 -Xcomp --version
+    return;
+  }
+
+  if (n->is_Vector()) {
+    // VectorNode::Ideal swaps edges, but only for ops
+    // that are deemed commutable. But swap_edges
+    // requires the hash to be invariant when the edges
+    // are swapped, which is not implemented for these
+    // vector nodes. This seems not to create any trouble
+    // usually, but we can also get graphs where in the
+    // end the nodes are not all commuted, so there is
+    // definitively an issue here.
+    //
+    // Probably we have two options: kill the hash, or
+    // properly make the hash commutation friendly.
+    //
+    // Found with:
+    //   compiler/vectorapi/TestMaskedMacroLogicVector.java
+    //   -XX:+IgnoreUnrecognizedVMOptions -XX:VerifyIterativeGVN=1110 -XX:+UseParallelGC -XX:+UseNUMA
+    return;
+  }
+
+  if (n->is_Region()) {
+    // LoopNode::Ideal calls RegionNode::Ideal.
+    // CountedLoopNode::Ideal calls RegionNode::Ideal too.
+    // But I got an issue because RegionNode::optimize_trichotomy
+    // then modifies another node, and pushes nodes to the worklist
+    // Not sure if this is ok, modifying another node like that.
+    // Maybe it is, then we need to look into what to do with
+    // the nodes that are now on the worklist, maybe just clear
+    // them out again. But maybe modifying other nodes like that
+    // is also bad design. In the end, we return nullptr for
+    // the current CountedLoop. But the extra nodes on the worklist
+    // trip the asserts later on.
+    //
+    // Found with:
+    //   compiler/eliminateAutobox/TestShortBoxing.java
+    //   -ea -esa -XX:CompileThreshold=100 -XX:+UnlockExperimentalVMOptions -server -XX:-TieredCompilation -XX:+IgnoreUnrecognizedVMOptions -XX:VerifyIterativeGVN=1110
+    return;
+  }
+
+  if (n->is_CallJava()) {
+    // CallStaticJavaNode::Ideal
+    // Led to a crash:
+    //   assert((is_CallStaticJava() && cg->is_mh_late_inline()) || (is_CallDynamicJava() && cg->is_virtual_late_inline())) failed: mismatch
+    //
+    // Did not investigate yet, could be a bug.
+    // Or maybe it does not expect to be called during verification.
+    //
+    // Found with:
+    //   test/jdk/jdk/incubator/vector/VectorRuns.java
+    //   -XX:VerifyIterativeGVN=1110
+
+    // CallDynamicJavaNode::Ideal, and I think also for CallStaticJavaNode::Ideal
+    //  and possibly their subclasses.
+    // During late inlining it can call CallJavaNode::register_for_late_inline
+    // That means we do more rounds of late inlining, but might fail.
+    // Then we do IGVN again, and register the node again for late inlining.
+    // This creates an endless cycle. Everytime we try late inlining, we
+    // are also creating more nodes, especially SafePoint and MergeMem.
+    // These nodes are immediately rejected when the inlining fails in the
+    // do_late_inline_check, but they still grow the memory, until we hit
+    // the MemLimit and crash.
+    // The assumption here seems that CallDynamicJavaNode::Ideal does not get
+    // called repeatedly, and eventually we terminate. I fear this is not
+    // a great assumption to make. We should investigate more.
+    //
+    // Found with:
+    //   compiler/loopopts/superword/TestDependencyOffsets.java#vanilla-U
+    //   -XX:+IgnoreUnrecognizedVMOptions -XX:VerifyIterativeGVN=1110
+    return;
+  }
+
+  // Ideal should not make progress if it returns nullptr.
+  // We use made_progress() rather than unique() or live_nodes() because some
+  // Ideal implementations speculatively create nodes and kill them before
+  // returning nullptr (e.g. split_if clones a Cmp to check is_canonical).
+  // unique() is a high-water mark that is not decremented by remove_dead_node,
+  // so it would cause false-positives. live_nodes() accounts for dead nodes but can
+  // decrease when Ideal removes existing nodes as side effects.
+  // made_progress() precisely tracks meaningful transforms, and speculative
+  // work killed via NodeOrigin::Speculative does not increment it.
+  uint old_progress = made_progress();
+  // The hash of a node should not change, this would indicate different inputs
+  uint old_hash = n->hash();
+  // Remove 'n' from hash table in case it gets modified. We want to avoid
+  // hitting the "Need to remove from hash before changing edges" assert if
+  // a change occurs. Instead, we would like to proceed with the optimization,
+  // return and finally hit the assert in PhaseIterGVN::verify_optimize to get
+  // a more meaningful message
+  _table.hash_delete(n);
+  Node* i = n->Ideal(this, can_reshape);
+  // If there was no new Idealization, we are probably happy.
+  if (i == nullptr) {
+    uint progress = made_progress() - old_progress;
+    if (progress != 0) {
+      stringStream ss; // Print as a block without tty lock.
+      ss.cr();
+      ss.print_cr("Ideal optimization did not make progress but had side effects.");
+      ss.print_cr("  %u transforms made progress", progress);
+      n->dump_bfs(1, nullptr, "", &ss);
+      tty->print_cr("%s", ss.as_string());
+      assert(false, "Unexpected side effects from applying Ideal optimization on %s", n->Name());
+    }
+
+    if (old_hash != n->hash()) {
+      stringStream ss; // Print as a block without tty lock.
+      ss.cr();
+      ss.print_cr("Ideal optimization did not make progress but node hash changed.");
+      ss.print_cr("  old_hash = %d, hash = %d", old_hash, n->hash());
+      n->dump_bfs(1, nullptr, "", &ss);
+      tty->print_cr("%s", ss.as_string());
+      assert(false, "Unexpected hash change from applying Ideal optimization on %s", n->Name());
+    }
+
+    verify_empty_worklist(n);
+
+    // Everything is good.
+    hash_find_insert(n);
+    return;
+  }
+
+  // We just saw a new Idealization which was not done during IGVN.
+  stringStream ss; // Print as a block without tty lock.
+  ss.cr();
+  ss.print_cr("Missed Ideal optimization (can_reshape=%s):", can_reshape ? "true": "false");
+  if (i == n) {
+    ss.print_cr("The node was reshaped by Ideal.");
+  } else {
+    ss.print_cr("The node was replaced by Ideal.");
+    ss.print_cr("Old node:");
+    n->dump_bfs(1, nullptr, "", &ss);
+  }
+  ss.print_cr("The result after Ideal:");
+  i->dump_bfs(1, nullptr, "", &ss);
+  tty->print_cr("%s", ss.as_string());
+
+  assert(false, "Missed Ideal optimization opportunity in PhaseIterGVN for %s", n->Name());
+}
+
+// Check that all Identity optimizations that could be done were done.
+// Asserts if it found missed optimization opportunities, and
+//         returns normally otherwise (no missed optimization, or skipped verification).
+void PhaseIterGVN::verify_Identity_for(Node* n) {
+  // First, we check a list of exceptions, where we skip verification,
+  // because there are known cases where Ideal can optimize after IGVN.
+  // Some may be expected and cannot be fixed, and others should be fixed.
+  switch (n->Opcode()) {
+    // SafePointNode::Identity can remove SafePoints, but wants to wait until
+    // after loopopts:
+    //   // Transforming long counted loops requires a safepoint node. Do not
+    //   // eliminate a safepoint until loop opts are over.
+    //   if (in(0)->is_Proj() && !phase->C->major_progress()) {
+    //
+    // I think the check for major_progress does delay it until after loopopts
+    // but it does not ensure that the node is on the IGVN worklist after
+    // loopopts. I think we should try to instead check for
+    // phase->C->post_loop_opts_phase() and call record_for_post_loop_opts_igvn.
+    //
+    // Found with:
+    //   java -XX:VerifyIterativeGVN=1000 -Xcomp --version
+    case Op_SafePoint:
+      return;
+
+    // MergeMemNode::Identity replaces the MergeMem with its base_memory if it
+    // does not record any other memory splits.
+    //
+    // I did not deeply investigate, but it looks like MergeMemNode::Identity
+    // never got called during IGVN for this node, investigate why.
+    //
+    // Found with:
+    //   java -XX:VerifyIterativeGVN=1000 -Xcomp --version
+    case Op_MergeMem:
+      return;
+
+    // ConstraintCastNode::Identity finds casts that are the same, except that
+    // the control is "higher up", i.e. dominates. The call goes via
+    // ConstraintCastNode::dominating_cast to PhaseGVN::is_dominator_helper,
+    // which traverses up to 100 idom steps. If anything gets optimized somewhere
+    // away from the cast, but within 100 idom steps, the cast may not be
+    // put on the IGVN worklist any more.
+    //
+    // Found with:
+    //   java -XX:VerifyIterativeGVN=1000 -Xcomp --version
+    case Op_CastPP:
+    case Op_CastII:
+    case Op_CastLL:
+      return;
+
+    // Same issue for CheckCastPP, uses ConstraintCastNode::Identity and
+    // checks dominator, which may be changed, but too far up for notification
+    // to work.
+    //
+    // Found with:
+    //   compiler/c2/irTests/TestSkeletonPredicates.java
+    //   -XX:VerifyIterativeGVN=1110
+    case Op_CheckCastPP:
+      return;
+
+    // In SubNode::Identity, we do:
+    //   Convert "(X+Y) - Y" into X and "(X+Y) - X" into Y
+    // In the example, the AddI had an input replaced, the AddI is
+    // added to the IGVN worklist, but the SubI is one link further
+    // down and is not added. I checked add_users_of_use_to_worklist
+    // where I would expect the SubI would be added, and I cannot
+    // find the pattern, only this one:
+    //   If changed AddI/SubI inputs, check CmpU for range check optimization.
+    //
+    // Fix this "notification" issue and check if there are any other
+    // issues.
+    //
+    // Found with:
+    //   java -XX:VerifyIterativeGVN=1000 -Xcomp --version
+    case Op_SubI:
+    case Op_SubL:
+      return;
+
+    // PhiNode::Identity checks for patterns like:
+    //   r = (x != con) ? x : con;
+    // that can be constant folded to "x".
+    //
+    // Call goes through PhiNode::is_cmove_id and CMoveNode::is_cmove_id.
+    // I suspect there was some earlier change to one of the inputs, but
+    // not all relevant outputs were put on the IGVN worklist.
+    //
+    // Found with:
+    //   test/hotspot/jtreg/gc/stress/gcbasher/TestGCBasherWithG1.java
+    //   -XX:VerifyIterativeGVN=1110
+    case Op_Phi:
+      return;
+
+    // ConvI2LNode::Identity does
+    // convert I2L(L2I(x)) => x
+    //
+    // Investigate why this did not already happen during IGVN.
+    //
+    // Found with:
+    //   compiler/loopopts/superword/TestDependencyOffsets.java#vanilla-A
+    //   -XX:VerifyIterativeGVN=1110
+    case Op_ConvI2L:
+      return;
+
+    // MaxNode::find_identity_operation
+    //  Finds patterns like Max(A, Max(A, B)) -> Max(A, B)
+    //  This can be a 2-hop search, so maybe notification is not
+    //  good enough.
+    //
+    // Found with:
+    //   compiler/codegen/TestBooleanVect.java
+    //   -XX:VerifyIterativeGVN=1110
+    case Op_MaxL:
+    case Op_MinL:
+    case Op_MaxI:
+    case Op_MinI:
+    case Op_MaxF:
+    case Op_MinF:
+    case Op_MaxHF:
+    case Op_MinHF:
+    case Op_MaxD:
+    case Op_MinD:
+      return;
+
+
+    // AddINode::Identity
+    // Converts (x-y)+y to x
+    // Could be issue with notification
+    //
+    // Turns out AddL does the same.
+    //
+    // Found with:
+    //  compiler/c2/Test6792161.java
+    //  -ea -esa -XX:CompileThreshold=100 -XX:+UnlockExperimentalVMOptions -server -XX:-TieredCompilation -XX:+IgnoreUnrecognizedVMOptions -XX:VerifyIterativeGVN=1110
+    case Op_AddI:
+    case Op_AddL:
+      return;
+
+    // AbsINode::Identity
+    // Not investigated yet.
+    case Op_AbsI:
+      return;
+  }
+
+  if (n->is_Load()) {
+    // LoadNode::Identity tries to look for an earlier store value via
+    // can_see_stored_value. I found an example where this led to
+    // an Allocation, where we could assume the value was still zero.
+    // So the LoadN can be replaced with a zerocon.
+    //
+    // Investigate why this was not already done during IGVN.
+    // A similar issue happens with Ideal.
+    //
+    // Found with:
+    //   java -XX:VerifyIterativeGVN=1000 -Xcomp --version
+    return;
+  }
+
+  if (n->is_Store()) {
+    // StoreNode::Identity
+    // Not investigated, but found missing optimization for StoreI.
+    // Looks like a StoreI is replaced with an InitializeNode.
+    //
+    // Found with:
+    //   applications/ctw/modules/java_base_2.java
+    //   -ea -esa -XX:CompileThreshold=100 -XX:+UnlockExperimentalVMOptions -server -XX:-TieredCompilation -Djava.awt.headless=true -XX:+IgnoreUnrecognizedVMOptions -XX:VerifyIterativeGVN=1110
+    return;
+  }
+
+  if (n->is_Vector()) {
+    // Found with tier1-3. Not investigated yet.
+    // The observed issue was with AndVNode::Identity
+    return;
+  }
+
+  Node* i = n->Identity(this);
+  // If we cannot find any other Identity, we are happy.
+  if (i == n) {
+    verify_empty_worklist(n);
+    return;
+  }
+
+  // The verification just found a new Identity that was not found during IGVN.
+  stringStream ss; // Print as a block without tty lock.
+  ss.cr();
+  ss.print_cr("Missed Identity optimization:");
+  ss.print_cr("Old node:");
+  n->dump_bfs(1, nullptr, "", &ss);
+  ss.print_cr("New node:");
+  i->dump_bfs(1, nullptr, "", &ss);
+  tty->print_cr("%s", ss.as_string());
+
+  assert(false, "Missed Identity optimization opportunity in PhaseIterGVN for %s", n->Name());
+}
+
+// Some other verifications that are not specific to a particular transformation.
+void PhaseIterGVN::verify_node_invariants_for(const Node* n) {
+  if (n->is_AddP()) {
+    if (!n->as_AddP()->address_input_has_same_base()) {
+      stringStream ss; // Print as a block without tty lock.
+      ss.cr();
+      ss.print_cr("Base pointers must match for AddP chain:");
+      n->dump_bfs(2, nullptr, "", &ss);
+      tty->print_cr("%s", ss.as_string());
+
+      assert(false, "Broken node invariant for %s", n->Name());
+    }
+  }
 }
 #endif
 
@@ -1218,6 +2234,9 @@ Node *PhaseIterGVN::transform_old(Node* n) {
 #endif
 
   DEBUG_ONLY(uint loop_count = 1;)
+  if (i != nullptr) {
+    set_progress();
+  }
   while (i != nullptr) {
 #ifdef ASSERT
     if (loop_count >= K + C->live_nodes()) {
@@ -1257,10 +2276,8 @@ Node *PhaseIterGVN::transform_old(Node* n) {
   // cache Value.  Later requests for the local phase->type of this Node can
   // use the cached Value instead of suffering with 'bottom_type'.
   if (type_or_null(k) != t) {
-#ifndef PRODUCT
-    inc_new_values();
+    NOT_PRODUCT(inc_new_values();)
     set_progress();
-#endif
     set_type(k, t);
     // If k is a TypeNode, capture any more-precise type permanently into Node
     k->raise_bottom_type(t);
@@ -1269,7 +2286,7 @@ Node *PhaseIterGVN::transform_old(Node* n) {
   }
   // If 'k' computes a constant, replace it with a constant
   if (t->singleton() && !k->is_Con()) {
-    NOT_PRODUCT(set_progress();)
+    set_progress();
     Node* con = makecon(t);     // Make a constant
     add_users_to_worklist(k);
     subsume_node(k, con);       // Everybody using k now uses con
@@ -1279,7 +2296,7 @@ Node *PhaseIterGVN::transform_old(Node* n) {
   // Now check for Identities
   i = k->Identity(this);      // Look for a nearby replacement
   if (i != k) {                // Found? Return replacement!
-    NOT_PRODUCT(set_progress();)
+    set_progress();
     add_users_to_worklist(k);
     subsume_node(k, i);       // Everybody using k now uses i
     return i;
@@ -1289,7 +2306,7 @@ Node *PhaseIterGVN::transform_old(Node* n) {
   i = hash_find_insert(k);      // Check for pre-existing node
   if (i && (i != k)) {
     // Return the pre-existing node if it isn't dead
-    NOT_PRODUCT(set_progress();)
+    set_progress();
     add_users_to_worklist(k);
     subsume_node(k, i);       // Everybody using k now uses i
     return i;
@@ -1308,7 +2325,7 @@ const Type* PhaseIterGVN::saturate(const Type* new_type, const Type* old_type,
 //------------------------------remove_globally_dead_node----------------------
 // Kill a globally dead Node.  All uses are also globally dead and are
 // aggressively trimmed.
-void PhaseIterGVN::remove_globally_dead_node( Node *dead ) {
+void PhaseIterGVN::remove_globally_dead_node(Node* dead, NodeOrigin origin) {
   enum DeleteProgress {
     PROCESS_INPUTS,
     PROCESS_OUTPUTS
@@ -1325,11 +2342,13 @@ void PhaseIterGVN::remove_globally_dead_node( Node *dead ) {
     uint progress_state = stack.index();
     assert(dead != C->root(), "killing root, eh?");
     assert(!dead->is_top(), "add check for top when pushing");
-    NOT_PRODUCT( set_progress(); )
     if (progress_state == PROCESS_INPUTS) {
       // After following inputs, continue to outputs
       stack.set_index(PROCESS_OUTPUTS);
       if (!dead->is_Con()) { // Don't kill cons but uses
+        if (origin != NodeOrigin::Speculative) {
+          set_progress();
+        }
         bool recurse = false;
         // Remove from hash table
         _table.hash_delete( dead );
@@ -1444,7 +2463,7 @@ void PhaseIterGVN::subsume_node( Node *old, Node *nn ) {
   // Smash all inputs to 'old', isolating him completely
   Node *temp = new Node(1);
   temp->init_req(0,nn);     // Add a use to nn to prevent him from dying
-  remove_dead_node( old );
+  remove_dead_node(old, NodeOrigin::Graph);
   temp->del_req(0);         // Yank bogus edge
   if (nn != nullptr && nn->outcnt() == 0) {
     _worklist.push(nn);
@@ -1667,12 +2686,14 @@ void PhaseIterGVN::add_users_of_use_to_worklist(Node* n, Node* use, Unique_Node_
       }
     }
   }
+  auto enqueue_init_mem_projs = [&](ProjNode* proj) {
+    add_users_to_worklist0(proj, worklist);
+  };
   // If changed initialization activity, check dependent Stores
   if (use_op == Op_Allocate || use_op == Op_AllocateArray) {
     InitializeNode* init = use->as_Allocate()->initialization();
     if (init != nullptr) {
-      Node* imem = init->proj_out_or_null(TypeFunc::Memory);
-      if (imem != nullptr) add_users_to_worklist0(imem, worklist);
+      init->for_each_proj(enqueue_init_mem_projs, TypeFunc::Memory);
     }
   }
   // If the ValidLengthTest input changes then the fallthrough path out of the AllocateArray may have become dead.
@@ -1686,8 +2707,8 @@ void PhaseIterGVN::add_users_of_use_to_worklist(Node* n, Node* use, Unique_Node_
   }
 
   if (use_op == Op_Initialize) {
-    Node* imem = use->as_Initialize()->proj_out_or_null(TypeFunc::Memory);
-    if (imem != nullptr) add_users_to_worklist0(imem, worklist);
+    InitializeNode* init = use->as_Initialize();
+    init->for_each_proj(enqueue_init_mem_projs, TypeFunc::Memory);
   }
   // Loading the java mirror from a Klass requires two loads and the type
   // of the mirror load depends on the type of 'n'. See LoadNode::Value().
@@ -1813,6 +2834,7 @@ uint PhaseCCP::_total_constants = 0;
 PhaseCCP::PhaseCCP( PhaseIterGVN *igvn ) : PhaseIterGVN(igvn) {
   NOT_PRODUCT( clear_constants(); )
   assert( _worklist.size() == 0, "" );
+  _phase = PhaseValuesType::ccp;
   analyze();
 }
 
@@ -1890,18 +2912,20 @@ void PhaseCCP::analyze() {
 
 #ifdef ASSERT
 // For every node n on verify list, check if type(n) == n->Value()
-// We have a list of exceptions, see comments in verify_node_value.
+// We have a list of exceptions, see comments in verify_Value_for.
 void PhaseCCP::verify_analyze(Unique_Node_List& worklist_verify) {
-  bool failure = false;
   while (worklist_verify.size()) {
     Node* n = worklist_verify.pop();
-    failure |= verify_node_value(n);
+
+    // An assert in verify_Value_for means that PhaseCCP is not at fixpoint
+    // and that the analysis result may be unsound.
+    // If this happens, check why the reported nodes were not processed again in CCP.
+    // We should either make sure that these nodes are properly added back to the CCP worklist
+    // in PhaseCCP::push_child_nodes_to_worklist() to update their type in the same round,
+    // or that they are added in PhaseCCP::needs_revisit() so that analysis revisits
+    // them at the end of the round.
+    verify_Value_for(n, true);
   }
-  // If we get this assert, check why the reported nodes were not processed again in CCP.
-  // We should either make sure that these nodes are properly added back to the CCP worklist
-  // in PhaseCCP::push_child_nodes_to_worklist() to update their type or add an exception
-  // in the verification code above if that is not possible for some reason (like Load nodes).
-  assert(!failure, "PhaseCCP not at fixpoint: analysis result may be unsound.");
 }
 #endif
 
