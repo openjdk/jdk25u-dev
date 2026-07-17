@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2026, Datadog, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,27 +21,27 @@
  * questions.
  */
 
-import java.net.http.HttpClient.Version;
-import java.time.Duration;
-import org.testng.annotations.Test;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-/*
- * @test
- * @summary Tests for connection related timeouts
- * @bug 8208391
- * @run testng/othervm ConnectTimeoutWithProxyAsync
- */
-
-public class ConnectTimeoutWithProxyAsync extends AbstractConnectTimeout {
-
-    @Test(dataProvider = "variants")
-    @Override
-    public void timeoutWithProxyAsync(Version requestVersion,
-                                      String scheme,
-                                      String method,
-                                      Duration connectTimeout,
-                                      Duration requestTimeout)
-    {
-        super.timeoutWithProxyAsync(requestVersion, scheme, method, connectTimeout, requestTimeout);
+@MyTypeAnnotation
+public record MyRecord(@MyTypeUseAnnotation String filter) {
+    public static MyRecord parse(String param) {
+        if (param == null) {
+            throw new IllegalArgumentException("Filter cannot be null");
+        }
+        return new MyRecord(param);
     }
+}
+
+@Target({ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@interface MyTypeAnnotation {
+}
+
+@Target({ElementType.TYPE_USE})
+@Retention(RetentionPolicy.RUNTIME)
+@interface MyTypeUseAnnotation {
 }

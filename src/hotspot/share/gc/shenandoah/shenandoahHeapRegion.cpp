@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2026, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2013, 2020, Red Hat, Inc. All rights reserved.
  * Copyright Amazon.com Inc. or its affiliates. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
@@ -32,7 +32,6 @@
 #include "gc/shenandoah/shenandoahGeneration.hpp"
 #include "gc/shenandoah/shenandoahHeap.inline.hpp"
 #include "gc/shenandoah/shenandoahHeapRegion.hpp"
-#include "gc/shenandoah/shenandoahHeapRegionSet.inline.hpp"
 #include "gc/shenandoah/shenandoahMarkingContext.inline.hpp"
 #include "gc/shenandoah/shenandoahOldGeneration.hpp"
 #include "gc/shenandoah/shenandoahScanRemembered.inline.hpp"
@@ -40,15 +39,12 @@
 #include "jfr/jfrEvents.hpp"
 #include "memory/allocation.hpp"
 #include "memory/iterator.inline.hpp"
-#include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/atomic.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/java.hpp"
-#include "runtime/mutexLocker.hpp"
 #include "runtime/os.hpp"
-#include "runtime/safepoint.hpp"
 #include "utilities/powerOfTwo.hpp"
 
 size_t ShenandoahHeapRegion::RegionCount = 0;
@@ -75,6 +71,7 @@ ShenandoahHeapRegion::ShenandoahHeapRegion(HeapWord* start, size_t index, bool c
   _plab_allocs(0),
   _live_data(0),
   _critical_pins(0),
+  _mixed_candidate_garbage_words(0),
   _update_watermark(start),
   _age(0),
 #ifdef SHENANDOAH_CENSUS_NOISE
@@ -565,22 +562,27 @@ void ShenandoahHeapRegion::recycle_internal() {
   assert(_recycling.is_set() && is_trash(), "Wrong state");
   ShenandoahHeap* heap = ShenandoahHeap::heap();
 
-  set_top(bottom());
+  _mixed_candidate_garbage_words = 0;
   clear_live_data();
   reset_alloc_metadata();
   heap->marking_context()->reset_top_at_mark_start(this);
   set_update_watermark(bottom());
   if (ZapUnusedHeapArea) {
-    SpaceMangler::mangle_region(MemRegion(bottom(), end()));
+    SpaceMangler::mangle_region(MemRegion(bottom(), top()));
   }
-
-  make_empty();
+  set_top(bottom());
   set_affiliation(FREE);
+
+  // Lastly, set region state to empty
+  make_empty();
 }
 
 void ShenandoahHeapRegion::try_recycle_under_lock() {
   shenandoah_assert_heaplocked();
-  if (is_trash() && _recycling.try_set()) {
+  if (!is_trash()) {
+    return;
+  }
+  if (_recycling.try_set()) {
     if (is_trash()) {
       ShenandoahHeap* heap = ShenandoahHeap::heap();
       ShenandoahGeneration* generation = heap->generation_for(affiliation());
@@ -600,12 +602,16 @@ void ShenandoahHeapRegion::try_recycle_under_lock() {
         os::naked_yield();
       }
     }
+    assert(!is_trash(), "Must not");
   }
 }
 
 void ShenandoahHeapRegion::try_recycle() {
   shenandoah_assert_not_heaplocked();
-  if (is_trash() && _recycling.try_set()) {
+  if (!is_trash()) {
+    return;
+  }
+  if (_recycling.try_set()) {
     // Double check region state after win the race to set recycling flag
     if (is_trash()) {
       ShenandoahHeap* heap = ShenandoahHeap::heap();
@@ -825,7 +831,7 @@ void ShenandoahHeapRegion::set_state(RegionState to) {
     evt.set_to(to);
     evt.commit();
   }
-  Atomic::store(&_state, to);
+  Atomic::release_store(&_state, to);
 }
 
 void ShenandoahHeapRegion::record_pin() {
@@ -853,16 +859,7 @@ void ShenandoahHeapRegion::set_affiliation(ShenandoahAffiliation new_affiliation
                   p2i(top()), p2i(ctx->top_at_mark_start(this)), p2i(_update_watermark), p2i(ctx->top_bitmap(this)));
   }
 
-#ifdef ASSERT
-  {
-    size_t idx = this->index();
-    HeapWord* top_bitmap = ctx->top_bitmap(this);
-
-    assert(ctx->is_bitmap_range_within_region_clear(top_bitmap, _end),
-           "Region %zu, bitmap should be clear between top_bitmap: " PTR_FORMAT " and end: " PTR_FORMAT, idx,
-           p2i(top_bitmap), p2i(_end));
-  }
-#endif
+  shenandoah_assert_clear_above_top(this);
 
   if (region_affiliation == new_affiliation) {
     return;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,28 +21,28 @@
  * questions.
  */
 
-import java.net.http.HttpClient.Version;
-import java.time.Duration;
-import org.testng.annotations.Test;
+package jdk.internal.net.http;
 
-/*
- * @test
- * @summary Tests for connection related timeouts
- * @bug 8208391
- * @run testng/othervm ConnectTimeoutWithProxySync
+import jdk.test.lib.net.SimpleSSLContext;
+
+import javax.net.ssl.SSLContext;
+
+/**
+ * Adapter for {@link SimpleSSLContext} for whitebox tests.
  */
+public final class SimpleSSLContextWhiteboxAdapter {
 
-public class ConnectTimeoutWithProxySync extends AbstractConnectTimeout {
+    private SimpleSSLContextWhiteboxAdapter() {}
 
-    @Test(dataProvider = "variants")
-    @Override
-    public void timeoutWithProxySync(Version requestVersion,
-                                     String scheme,
-                                     String method,
-                                     Duration connectTimeout,
-                                     Duration requestTimeout)
-        throws Exception
-    {
-        super.timeoutWithProxySync(requestVersion, scheme, method, connectTimeout, requestTimeout);
+    /**
+     * {@return a new {@link SSLContext} instance by searching for a key store
+     * file path, and loading the first found one}
+     *
+     * @throws RuntimeException if no key store file can be found or the found
+     * one cannot be loaded
+     */
+    public static SSLContext findSSLContext() {
+        return SimpleSSLContext.findSSLContext("../../../../../lib/jdk/test/lib/net/testkeys", "TLS");
     }
+
 }
