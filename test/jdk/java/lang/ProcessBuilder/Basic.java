@@ -28,7 +28,7 @@
  *      6464154 6523983 6206031 4960438 6631352 6631966 6850957 6850958
  *      4947220 7018606 7034570 4244896 5049299 8003488 8054494 8058464
  *      8067796 8224905 8263729 8265173 8272600 8231297 8282219 8285517
- *      8352533 8368192
+ *      8352533 8368192 8377907
  * @key intermittent
  * @summary Basic tests for Process and Environment Variable code
  * @modules java.base/java.lang:open
@@ -46,9 +46,21 @@
  * @modules java.base/java.lang:open
  *          java.base/java.io:open
  *          java.base/jdk.internal.misc
- * @requires (os.family == "linux" & !vm.musl)
+ * @requires !vm.musl
+ * @requires vm.flagless
  * @library /test/lib
  * @run main/othervm/timeout=300 -Djdk.lang.Process.launchMechanism=posix_spawn Basic
+ */
+
+/*
+ * @test
+ * @modules java.base/java.lang:open
+ *          java.base/java.io:open
+ *          java.base/jdk.internal.misc
+ * @requires (os.family == "linux" & !vm.musl)
+ * @requires vm.flagless
+ * @library /test/lib
+ * @run main/othervm/timeout=300 -Djdk.lang.Process.launchMechanism=vfork Basic
  */
 
 import java.lang.ProcessBuilder.Redirect;
@@ -212,7 +224,7 @@ public class Basic {
 
     private static String winEnvFilter(String env) {
         return env.replaceAll("\r", "")
-            .replaceAll("(?m)^(?:COMSPEC|PROMPT|PATHEXT)=.*\n","");
+            .replaceAll("(?m)^(?:COMSPEC|PROMPT|PATHEXT|PROCESSOR_ARCHITECTURE)=.*\n","");
     }
 
     private static String unixEnvProg() {
@@ -810,6 +822,14 @@ public class Basic {
         return vars.replace("AIXTHREAD_GUARDPAGES=0,", "");
     }
 
+    /* Only used for Windows AArch64 --
+     * Windows AArch64 adds the variable PROCESSOR_ARCHITECTURE=ARM64 to the environment.
+     * Remove it from the list of env variables
+     */
+    private static String removeWindowsAArch64ExpectedVars(String vars) {
+        return vars.replace("PROCESSOR_ARCHITECTURE=ARM64,", "");
+    }
+
     private static String sortByLinesWindowsly(String text) {
         String[] lines = text.split("\n");
         Arrays.sort(lines, new WindowsComparator());
@@ -1222,6 +1242,20 @@ public class Basic {
             equal(r.out(), "standard output");
             equal(r.err(), "standard error");
         }
+
+        //----------------------------------------------------------------
+        // Default: should go to pipes (use a fresh ProcessBuilder)
+        //----------------------------------------------------------------
+        {
+            ProcessBuilder pb2 = new ProcessBuilder(childArgs);
+            Process p = pb2.start();
+            new PrintStream(p.getOutputStream()).print("standard input");
+            p.getOutputStream().close();
+            ProcessResults r = run(p);
+            equal(r.exitValue(), 0);
+            equal(r.out, "standard output");
+            equal(r.err, "standard error");
+        }
     }
 
     static void checkProcessPid() {
@@ -1259,6 +1293,8 @@ public class Basic {
             System.out.println("This appears to be a Unix system.");
         if (UnicodeOS.is())
             System.out.println("This appears to be a Unicode-based OS.");
+
+        System.out.println("Using:" + System.getProperty("jdk.lang.Process.launchMechanism"));
 
         try { testIORedirection(); }
         catch (Throwable t) { unexpected(t); }
@@ -1319,6 +1355,9 @@ public class Basic {
             }
             if (AIX.is()) {
                 result = removeAixExpectedVars(result);
+            }
+            if (Windows.is() && Platform.isAArch64()) {
+                result = removeWindowsAArch64ExpectedVars(result);
             }
             equal(result, expected);
         } catch (Throwable t) { unexpected(t); }
@@ -1832,6 +1871,9 @@ public class Basic {
             if (AIX.is()) {
                 commandOutput = removeAixExpectedVars(commandOutput);
             }
+            if (Windows.is() && Platform.isAArch64()) {
+                commandOutput = removeWindowsAArch64ExpectedVars(commandOutput);
+            }
             equal(commandOutput, expected);
             if (Windows.is()) {
                 ProcessBuilder pb = new ProcessBuilder(childArgs);
@@ -1839,7 +1881,11 @@ public class Basic {
                 pb.environment().put("SystemRoot", systemRoot);
                 pb.environment().put("=ExitValue", "3");
                 pb.environment().put("=C:", "\\");
-                equal(commandOutput(pb), expected);
+                commandOutput = commandOutput(pb);
+                if (Platform.isAArch64()) {
+                    commandOutput = removeWindowsAArch64ExpectedVars(commandOutput);
+                }
+                equal(commandOutput, expected);
             }
         } catch (Throwable t) { unexpected(t); }
 
@@ -1890,6 +1936,9 @@ public class Basic {
             }
             if (AIX.is()) {
                 commandOutput = removeAixExpectedVars(commandOutput);
+            }
+            if (Windows.is() && Platform.isAArch64()) {
+                commandOutput = removeWindowsAArch64ExpectedVars(commandOutput);
             }
             check(commandOutput.equals(Windows.is()
                     ? "LC_ALL=C,SystemRoot="+systemRoot+","
