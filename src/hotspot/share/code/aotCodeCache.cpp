@@ -143,7 +143,7 @@ void AOTCodeCache::initialize() {
 
   // Disable adapters caching which requires CPU features matching checks
   // which we don't have in this version of code.
-  FLAG_SET_ERGO(AOTAdapterCaching, false);
+  FLAG_SET_ERGO_IF_DEFAULT(AOTAdapterCaching, false);
 
   // Disable stubs caching until JDK-8357398 is fixed.
   FLAG_SET_ERGO(AOTStubCaching, false);
