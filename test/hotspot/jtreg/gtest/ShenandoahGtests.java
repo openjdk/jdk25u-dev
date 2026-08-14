@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright Amazon.com Inc. or its affiliates. All Rights Reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -19,24 +19,13 @@
  * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
  * or visit www.oracle.com if you need additional information or have any
  * questions.
- */
-
-/*
- * @test
- * @bug 4303068
- * @summary be allowed to specify the security properties file
- *      as a -D system property
  *
- * @run main/othervm -Djava.security.properties=${test.src}/SecurityPropFile.file -Djava.security.debug=properties SecurityPropFile
  */
 
-public class SecurityPropFile {
-    public static void main(String[] args) {
-        System.out.println(java.security.Security.getProperty
-                                ("policy.provider"));
-        System.out.println(java.security.Security.getProperty
-                                ("policy.url.1"));
-        System.out.println(java.security.Security.getProperty
-                                ("policy.url.2"));
-    }
-}
+/* @test
+ * @summary Run Shenandoah gtests
+ * @library /test/lib
+ * @requires vm.gc.Shenandoah
+ * @requires vm.debug
+ * @run main/native GTestWrapper --gtest_filter=Shenandoah*
+ */
