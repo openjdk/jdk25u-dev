@@ -2183,8 +2183,14 @@ Note: DTD @-annotations are not currently converted to .xsd. For full CLDR file 
       <xs:attribute name="from"/>
       <xs:attribute name="to"/>
       <xs:attribute name="mzone" type="xs:NMTOKEN" use="required"/>
+      <xs:attribute name="stdOffset"/>
+      <xs:attribute name="dstOffset"/>
     </xs:complexType>
   </xs:element>
+  
+  
+  
+  
   
   
   
