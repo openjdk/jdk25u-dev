@@ -2191,10 +2191,6 @@ Note: DTD @-annotations are not currently converted to .xsd. For full CLDR file 
   
   
   
-  
-  
-  
-  
   <xs:element name="plurals">
     <xs:complexType>
       <xs:sequence>
