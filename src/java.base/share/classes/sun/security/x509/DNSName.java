@@ -244,7 +244,7 @@ public class DNSName implements GeneralNameInterface {
                 (((DNSName)inputName).getName()).toLowerCase(Locale.ENGLISH);
             String thisName = name.toLowerCase(Locale.ENGLISH);
 
-            if (HOSTNAME_CHECKER.isMatched(thisName, inName, false))
+            if (inName.equals(thisName) || HOSTNAME_CHECKER.isMatched(thisName, inName, false))
                 constraintType = NAME_MATCH;
             else if (thisName.endsWith(inName)) {
                 int inNdx = thisName.lastIndexOf(inName);
