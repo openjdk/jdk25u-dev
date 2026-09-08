@@ -40,6 +40,7 @@
 #include "runtime/vmThread.hpp"
 #include "utilities/defaultStream.hpp"
 #include "utilities/formatBuffer.hpp"
+#include "utilities/globalDefinitions.hpp"
 
 bool CDSConfig::_is_dumping_static_archive = false;
 bool CDSConfig::_is_dumping_preimage_static_archive = false;
@@ -102,6 +103,12 @@ void CDSConfig::ergo_initialize() {
 
   if (!is_dumping_heap()) {
     _is_dumping_full_module_graph = false;
+  }
+
+  if (!MetaspaceShared::shared_base_valid((char*)SharedBaseAddress)) {
+     log_warning(cds)("SharedBaseAddress " PTR_FORMAT " is invalid. Reverting to " PTR_FORMAT,
+                 p2i((void*)SharedBaseAddress), p2i((void*)DEFAULT_SHARED_BASE_ADDRESS));
+     FLAG_SET_ERGO(SharedBaseAddress, DEFAULT_SHARED_BASE_ADDRESS);
   }
 }
 
