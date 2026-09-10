@@ -57,7 +57,7 @@ import tests.JImageGenerator;
  *          jdk.compiler
  * @build tests.*
  * @build jdk.test.lib.util.FileUtils
- * @run main/othervm/timeout=480 -Xmx1g JLinkTest
+ * @run main/othervm -Xmx1g JLinkTest
  */
 public class JLinkTest {
     static final ToolProvider JLINK_TOOL = ToolProvider.findFirst("jlink")
