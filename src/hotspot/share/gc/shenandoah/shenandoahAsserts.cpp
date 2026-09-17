@@ -30,6 +30,7 @@
 #include "gc/shenandoah/shenandoahMarkingContext.inline.hpp"
 #include "gc/shenandoah/shenandoahUtils.hpp"
 #include "memory/resourceArea.hpp"
+#include "runtime/orderAccess.hpp"
 
 void print_raw_memory(ShenandoahMessageBuffer &msg, void* loc) {
   // Be extra safe. Only access data that is guaranteed to be safe:
@@ -381,6 +382,15 @@ void ShenandoahAsserts::assert_marked_strong(void *interior_loc, oop obj, const 
   }
 }
 
+void ShenandoahAsserts::assert_bitmap_clear_above_top(ShenandoahHeapRegion* region) {
+  ShenandoahMarkingContext* const ctx = ShenandoahHeap::heap()->marking_context();
+  const HeapWord* top_bitmap = ctx->top_bitmap(region);
+  // Make sure that top is loaded before any of the marks from the bitmap are loaded. If another
+  // thread has cleared the bitmap we must not allow any stale reads.
+  OrderAccess::loadload();
+  assert(ctx->is_bitmap_range_within_region_clear(top_bitmap, region->end()), "Bitmap above top_bitmap() must be clear");
+}
+
 void ShenandoahAsserts::assert_in_cset(void* interior_loc, oop obj, const char* file, int line) {
   assert_correct(interior_loc, obj, file, line);
 
@@ -499,7 +509,8 @@ void ShenandoahAsserts::assert_control_or_vm_thread_at_safepoint(bool at_safepoi
 }
 
 void ShenandoahAsserts::assert_generations_reconciled(const char* file, int line) {
-  if (!SafepointSynchronize::is_at_safepoint()) {
+  if (!ShenandoahSafepoint::is_at_shenandoah_safepoint()) {
+    // Only shenandoah safepoint operations participate in the active/gc generation scheme
     return;
   }
 
@@ -510,6 +521,6 @@ void ShenandoahAsserts::assert_generations_reconciled(const char* file, int line
     return;
   }
 
-  ShenandoahMessageBuffer msg("Active(%d) & GC(%d) Generations aren't reconciled", agen->type(), ggen->type());
+  ShenandoahMessageBuffer msg("Active(%s) & GC(%s) Generations aren't reconciled", agen->name(), ggen->name());
   report_vm_error(file, line, msg.buffer());
 }

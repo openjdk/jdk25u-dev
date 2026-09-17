@@ -671,6 +671,8 @@ class os: AllStatic {
   static int open(const char *path, int oflag, int mode);
   static FILE* fdopen(int fd, const char* mode);
   static FILE* fopen(const char* path, const char* mode);
+  static int64_t ftell(FILE* file);
+  static int fseek(FILE* file, int64_t offset, int whence);
   static jlong lseek(int fd, jlong offset, int whence);
   static bool file_exists(const char* file);
 
@@ -972,10 +974,7 @@ class os: AllStatic {
   // The thread_cpu_time() and current_thread_cpu_time() are only
   // supported if is_thread_cpu_time_supported() returns true.
 
-  // Thread CPU Time - return the fast estimate on a platform
-  // On Linux   - fast clock_gettime where available - user+sys
-  //            - otherwise: very slow /proc fs - user+sys
-  // On Windows - GetThreadTimes - user+sys
+  // Thread CPU Time - return the fast estimate on a platform - user+sys
   static jlong current_thread_cpu_time();
   static jlong thread_cpu_time(Thread* t);
 
