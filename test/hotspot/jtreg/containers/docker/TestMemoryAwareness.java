@@ -59,10 +59,7 @@ public class TestMemoryAwareness {
     }
 
     public static void main(String[] args) throws Exception {
-        if (!DockerTestUtils.canTestDocker()) {
-            return;
-        }
-
+        DockerTestUtils.checkCanTestDocker();
         Common.prepareWhiteBox();
         DockerTestUtils.buildJdkContainerImage(imageName);
 
@@ -105,9 +102,7 @@ public class TestMemoryAwareness {
             testMetricsSwapExceedingPhysical();
             testContainerMemExceedsPhysical();
         } finally {
-            if (!DockerTestUtils.RETAIN_IMAGE_AFTER_TEST) {
-                DockerTestUtils.removeDockerImage(imageName);
-            }
+            DockerTestUtils.removeDockerImage(imageName);
         }
     }
 

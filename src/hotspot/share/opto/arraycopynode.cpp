@@ -182,6 +182,12 @@ Node* ArrayCopyNode::try_clone_instance(PhaseGVN *phase, bool can_reshape, int c
     return nullptr;
   }
 
+  Node* out_mem = proj_out_or_null(TypeFunc::Memory);
+  if (can_reshape && out_mem == nullptr) { // dead node?
+    return NodeSentinel;
+  }
+
+
   Node* base_src = in(ArrayCopyNode::Src);
   Node* base_dest = in(ArrayCopyNode::Dest);
   Node* ctl = in(TypeFunc::Control);
@@ -210,6 +216,15 @@ Node* ArrayCopyNode::try_clone_instance(PhaseGVN *phase, bool can_reshape, int c
     } else {
       phase->C->dependencies()->assert_leaf_type(ik);
     }
+  }
+
+  const TypeInstPtr* dest_type = phase->type(base_dest)->is_instptr();
+  if (dest_type->instance_klass() != ik) {
+    // At parse time, the exact type of the object to clone was not known. That inexact type was captured by the CheckCastPP
+    // of the newly allocated cloned object (in dest). The exact type is now known (in src), but the type for the cloned object
+    // (dest) was not updated. When copying the fields below, Store nodes may write to offsets for fields that don't exist in
+    // the inexact class. The stores would then be assigned an incorrect slice.
+    return NodeSentinel;
   }
 
   assert(ik->nof_nonstatic_fields() <= ArrayCopyLoadStoreMaxElem, "too many fields");

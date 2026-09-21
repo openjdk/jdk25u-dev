@@ -140,7 +140,7 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
 
     Label detect_486, cpu486, detect_586, std_cpuid1, std_cpuid4, std_cpuid24, std_cpuid29;
     Label sef_cpuid, sefsl1_cpuid, ext_cpuid, ext_cpuid1, ext_cpuid5, ext_cpuid7;
-    Label ext_cpuid8, done, wrapup, vector_save_restore, apx_save_restore_warning;
+    Label ext_cpuid8, done, wrapup, vector_save_restore, apx_save_restore_warning, apx_xstate;
     Label legacy_setup, save_restore_except, legacy_save_restore, start_simd_check;
 
     StubCodeMark mark(this, "VM_Version", "get_cpu_info_stub");
@@ -464,6 +464,20 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
     __ lea(rsi, Address(rbp, in_bytes(VM_Version::apx_save_offset())));
     __ movq(Address(rsi, 0), r16);
     __ movq(Address(rsi, 8), r31);
+
+    //
+    // Query CPUID 0xD.19 for APX XSAVE offset
+    // Extended State Enumeration Sub-leaf 19 (APX)
+    // EAX = size of APX state (should be 128)
+    // EBX = offset in standard XSAVE format
+    //
+    __ movl(rax, 0xD);
+    __ movl(rcx, 19);
+    __ cpuid();
+    __ lea(rsi, Address(rbp, in_bytes(VM_Version::apx_xstate_size_offset())));
+    __ movl(Address(rsi, 0), rax);
+    __ lea(rsi, Address(rbp, in_bytes(VM_Version::apx_xstate_offset_offset())));
+    __ movl(Address(rsi, 0), rbx);
 
     UseAPX = save_apx;
     __ bind(vector_save_restore);
@@ -1135,6 +1149,10 @@ void VM_Version::get_processor_features() {
         warning("AES intrinsics require UseAES flag to be enabled. Intrinsics will be disabled.");
       }
       FLAG_SET_DEFAULT(UseAESIntrinsics, false);
+      if (UseAESCTRIntrinsics && !FLAG_IS_DEFAULT(UseAESCTRIntrinsics)) {
+        warning("AES_CTR intrinsics require UseAES flag to be enabled. AES_CTR intrinsics will be disabled.");
+      }
+      FLAG_SET_DEFAULT(UseAESCTRIntrinsics, false);
     } else {
       if (UseSSE > 2) {
         if (FLAG_IS_DEFAULT(UseAESIntrinsics)) {
@@ -1153,8 +1171,8 @@ void VM_Version::get_processor_features() {
       if (!UseAESIntrinsics) {
         if (UseAESCTRIntrinsics && !FLAG_IS_DEFAULT(UseAESCTRIntrinsics)) {
           warning("AES-CTR intrinsics require UseAESIntrinsics flag to be enabled. Intrinsics will be disabled.");
-          FLAG_SET_DEFAULT(UseAESCTRIntrinsics, false);
         }
+        FLAG_SET_DEFAULT(UseAESCTRIntrinsics, false);
       } else {
         if (supports_sse4_1()) {
           if (FLAG_IS_DEFAULT(UseAESCTRIntrinsics)) {
@@ -1174,16 +1192,16 @@ void VM_Version::get_processor_features() {
   } else if (UseAES || UseAESIntrinsics || UseAESCTRIntrinsics) {
     if (UseAES && !FLAG_IS_DEFAULT(UseAES)) {
       warning("AES instructions are not available on this CPU");
-      FLAG_SET_DEFAULT(UseAES, false);
     }
+    FLAG_SET_DEFAULT(UseAES, false);
     if (UseAESIntrinsics && !FLAG_IS_DEFAULT(UseAESIntrinsics)) {
       warning("AES intrinsics are not available on this CPU");
-      FLAG_SET_DEFAULT(UseAESIntrinsics, false);
     }
+    FLAG_SET_DEFAULT(UseAESIntrinsics, false);
     if (UseAESCTRIntrinsics && !FLAG_IS_DEFAULT(UseAESCTRIntrinsics)) {
       warning("AES-CTR intrinsics are not available on this CPU");
-      FLAG_SET_DEFAULT(UseAESCTRIntrinsics, false);
     }
+    FLAG_SET_DEFAULT(UseAESCTRIntrinsics, false);
   }
 
   // Use CLMUL instructions if available.
@@ -1259,7 +1277,7 @@ void VM_Version::get_processor_features() {
   // Kyber Intrinsics
   // Currently we only have them for AVX512
 #ifdef _LP64
-  if (supports_evex() && supports_avx512bw()) {
+  if (supports_avx512vlbw()) {
       if (FLAG_IS_DEFAULT(UseKyberIntrinsics)) {
           UseKyberIntrinsics = true;
       }
@@ -1271,8 +1289,7 @@ void VM_Version::get_processor_features() {
   }
 
   // Dilithium Intrinsics
-  // Currently we only have them for AVX512
-  if (supports_evex() && supports_avx512bw()) {
+  if (UseAVX > 1) {
       if (FLAG_IS_DEFAULT(UseDilithiumIntrinsics)) {
           UseDilithiumIntrinsics = true;
       }
@@ -1341,16 +1358,16 @@ void VM_Version::get_processor_features() {
     FLAG_SET_DEFAULT(UseSHA512Intrinsics, false);
   }
 
-  if (supports_evex() && supports_avx512bw()) {
-      if (FLAG_IS_DEFAULT(UseSHA3Intrinsics)) {
-          UseSHA3Intrinsics = true;
-      }
+  if (UseSHA && supports_evex() && supports_avx512bw()) {
+    if (FLAG_IS_DEFAULT(UseSHA3Intrinsics)) {
+      FLAG_SET_DEFAULT(UseSHA3Intrinsics, true);
+    }
   } else if (UseSHA3Intrinsics) {
-      warning("Intrinsics for SHA3-224, SHA3-256, SHA3-384 and SHA3-512 crypto hash functions not available on this CPU.");
-      FLAG_SET_DEFAULT(UseSHA3Intrinsics, false);
+    warning("Intrinsics for SHA3-224, SHA3-256, SHA3-384 and SHA3-512 crypto hash functions not available on this CPU.");
+    FLAG_SET_DEFAULT(UseSHA3Intrinsics, false);
   }
 
-  if (!(UseSHA1Intrinsics || UseSHA256Intrinsics || UseSHA512Intrinsics)) {
+  if (!(UseSHA1Intrinsics || UseSHA256Intrinsics || UseSHA512Intrinsics || UseSHA3Intrinsics)) {
     FLAG_SET_DEFAULT(UseSHA, false);
   }
 

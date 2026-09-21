@@ -445,6 +445,9 @@ class MacroAssembler: public Assembler {
   void sign_extend_short(Register reg);
   void sign_extend_byte(Register reg);
 
+  // Clean up a subword typed value to the representation in compliance with JVMS §2.3
+  void narrow_subword_type(Register reg, BasicType bt);
+
   // Division by power of 2, rounding towards 0
   void division_with_shift(Register reg, int shift_value);
 
@@ -1370,6 +1373,7 @@ public:
 
   void vpcmpeqw(XMMRegister dst, XMMRegister nds, Address src, int vector_len);
   void vpcmpeqw(XMMRegister dst, XMMRegister nds, XMMRegister src, int vector_len);
+  using Assembler::evpcmpeqd;
   void evpcmpeqd(KRegister kdst, KRegister mask, XMMRegister nds, AddressLiteral src, int vector_len, Register rscratch = noreg);
 
   // Vector compares

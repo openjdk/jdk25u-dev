@@ -87,6 +87,9 @@ JVM_InternString(JNIEnv *env, jstring str);
 /*
  * java.lang.System
  */
+JNIEXPORT jboolean JNICALL
+JVM_AOTEndRecording(JNIEnv *env);
+
 JNIEXPORT jlong JNICALL
 JVM_CurrentTimeMillis(JNIEnv *env, jclass ignored);
 
@@ -352,6 +355,9 @@ JVM_HasReferencePendingList(JNIEnv *env);
 
 JNIEXPORT void JNICALL
 JVM_WaitForReferencePendingList(JNIEnv *env);
+
+JNIEXPORT jobject JNICALL
+JVM_ReferenceGet(JNIEnv *env, jobject ref);
 
 JNIEXPORT jboolean JNICALL
 JVM_ReferenceRefersTo(JNIEnv *env, jobject ref, jobject o);

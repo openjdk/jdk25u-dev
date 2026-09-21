@@ -80,7 +80,6 @@ void ShenandoahGenerationalEvacuationTask::do_work() {
     promote_regions();
   } else {
     assert(!ShenandoahHeap::heap()->collection_set()->is_empty(), "Should have a collection set here");
-    ShenandoahEvacOOMScope oom_evac_scope;
     evacuate_and_promote_regions();
   }
 }
@@ -124,6 +123,7 @@ void ShenandoahGenerationalEvacuationTask::evacuate_and_promote_regions() {
 
     if (r->is_cset()) {
       assert(r->has_live(), "Region %zu should have been reclaimed early", r->index());
+      ShenandoahEvacOOMScope oom_evac_scope;
       _heap->marked_object_iterate(r, &cl);
       if (ShenandoahPacing) {
         _heap->pacer()->report_evac(r->used() >> LogHeapWordSize);
@@ -150,7 +150,13 @@ void ShenandoahGenerationalEvacuationTask::maybe_promote_region(ShenandoahHeapRe
       // more garbage than ShenandoahOldGarbageThreshold, we'll promote by evacuation.  If there is room for evacuation
       // in this cycle, the region will be in the collection set.  If there is not room, the region will be promoted
       // by evacuation in some future GC cycle.
-      promote_humongous(r);
+
+      // We do not promote primitive arrays because there's no performance penalty keeping them in young.  When/if they
+      // become garbage, reclaiming the memory from young is much quicker and more efficient than reclaiming them from old.
+      oop obj = cast_to_oop(r->bottom());
+      if (!obj->is_typeArray()) {
+        promote_humongous(r);
+      }
     } else if (r->is_regular() && (r->get_top_before_promote() != nullptr)) {
       // Likewise, we cannot put promote-in-place regions into the collection set because that would also trigger
       // the LRB to copy on reference fetch.
