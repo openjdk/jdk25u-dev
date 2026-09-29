@@ -1229,6 +1229,7 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
     if (LockingMode == LM_LIGHTWEIGHT) {
       // Get locked oop from the handle we passed to jni
       __ ldr(sync_obj, Address(sync_handle));
+
       log_trace(fastlock)("SharedRuntime unlock fast");
       __ lightweight_unlock(sync_obj, R2 /* t1 */, tmp /* t2 */, Rtemp /* t3 */,
                             7 /* savemask */, slow_unlock);
