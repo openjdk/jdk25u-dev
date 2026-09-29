@@ -97,7 +97,8 @@ public final class LinuxAMD64CFrame extends BasicCFrame {
 
    private boolean isValidFrame(Address nextCFA, ThreadContext context) {
      return (nextCFA != null) &&
-             !nextCFA.lessThan(context.getRegisterAsAddress(AMD64ThreadContext.RSP));
+             !nextCFA.lessThan(context.getRegisterAsAddress(AMD64ThreadContext.RSP)) &&
+             ((cfa == null) || nextCFA.greaterThan(cfa));
    }
 
    private Address getNextCFA(DwarfParser nextDwarf, ThreadContext context) {
