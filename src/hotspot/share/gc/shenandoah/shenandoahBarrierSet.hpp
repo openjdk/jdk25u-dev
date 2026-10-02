@@ -60,6 +60,8 @@ public:
 
   static bool need_load_reference_barrier(DecoratorSet decorators, BasicType type);
   static bool need_keep_alive_barrier(DecoratorSet decorators, BasicType type);
+  static bool need_satb_barrier(DecoratorSet decorators, BasicType type);
+  static bool need_card_barrier(DecoratorSet decorators, BasicType type);
 
   static bool is_strong_access(DecoratorSet decorators) {
     return (decorators & (ON_WEAK_OOP_REF | ON_PHANTOM_OOP_REF)) == 0;
@@ -123,13 +125,13 @@ public:
   inline oop oop_xchg(DecoratorSet decorators, T* addr, oop new_value);
 
   template <DecoratorSet decorators, typename T>
-  void write_ref_field_post(T* field);
+  void write_ref_field_post(T* field, oop new_value);
 
   void write_ref_array(HeapWord* start, size_t count);
 
 private:
-  template <class T>
-  inline void arraycopy_marking(T* src, T* dst, size_t count, bool is_old_marking);
+  template <bool IS_GENERATIONAL, class T>
+  void arraycopy_marking(T* dst, size_t count);
   template <class T>
   inline void arraycopy_evacuation(T* src, size_t count);
   template <class T>

@@ -1878,6 +1878,11 @@ public class IRNode {
        beforeMatchingNameRegex(SQRT_HF, "SqrtHF");
     }
 
+    public static final String SQRT_D = PREFIX + "SQRT_D" + POSTFIX;
+    static {
+        beforeMatchingNameRegex(SQRT_D, "SqrtD");
+    }
+
     public static final String SQRT_F = PREFIX + "SQRT_F" + POSTFIX;
     static {
        beforeMatchingNameRegex(SQRT_F, "SqrtF");
@@ -2272,6 +2277,11 @@ public class IRNode {
     public static final String VECTOR_MASK_CMP_D = VECTOR_PREFIX + "VECTOR_MASK_CMP_D" + POSTFIX;
     static {
         vectorNode(VECTOR_MASK_CMP_D, "VectorMaskCmp", TYPE_DOUBLE);
+    }
+
+    public static final String VECTOR_MASK_CMP = PREFIX + "VECTOR_MASK_CMP" + POSTFIX;
+    static {
+        beforeMatchingNameRegex(VECTOR_MASK_CMP, "VectorMaskCmp");
     }
 
     public static final String VECTOR_CAST_B2S = VECTOR_PREFIX + "VECTOR_CAST_B2S" + POSTFIX;
@@ -2669,24 +2679,24 @@ public class IRNode {
         machOnlyNameRegex(X86_SCONV_F2L, "convF2L_reg_reg");
     }
 
-    public static final String X86_SCONV_D2I_AVX10 = PREFIX + "X86_SCONV2_D2I_AVX10" + POSTFIX;
+    public static final String X86_SCONV_D2I_AVX10_2 = PREFIX + "X86_SCONV_D2I_AVX10_2" + POSTFIX;
     static {
-        machOnlyNameRegex(X86_SCONV_D2I_AVX10, "convD2I_(reg_reg|reg_mem)_avx10");
+        machOnlyNameRegex(X86_SCONV_D2I_AVX10_2, "convD2I_(reg_reg|reg_mem)_avx10_2");
     }
 
-    public static final String X86_SCONV_D2L_AVX10 = PREFIX + "X86_SCONV_D2L_AVX10" + POSTFIX;
+    public static final String X86_SCONV_D2L_AVX10_2 = PREFIX + "X86_SCONV_D2L_AVX10_2" + POSTFIX;
     static {
-        machOnlyNameRegex(X86_SCONV_D2L_AVX10, "convD2L_(reg_reg|reg_mem)_avx10");
+        machOnlyNameRegex(X86_SCONV_D2L_AVX10_2, "convD2L_(reg_reg|reg_mem)_avx10_2");
     }
 
-    public static final String X86_SCONV_F2I_AVX10 = PREFIX + "X86_SCONV_F2I_AVX10" + POSTFIX;
+    public static final String X86_SCONV_F2I_AVX10_2 = PREFIX + "X86_SCONV_F2I_AVX10_2" + POSTFIX;
     static {
-        machOnlyNameRegex(X86_SCONV_F2I_AVX10, "convF2I_(reg_reg|reg_mem)_avx10");
+        machOnlyNameRegex(X86_SCONV_F2I_AVX10_2, "convF2I_(reg_reg|reg_mem)_avx10_2");
     }
 
-    public static final String X86_SCONV_F2L_AVX10 = PREFIX + "X86_SCONV_F2L_AVX10" + POSTFIX;
+    public static final String X86_SCONV_F2L_AVX10_2 = PREFIX + "X86_SCONV_F2L_AVX10_2" + POSTFIX;
     static {
-        machOnlyNameRegex(X86_SCONV_F2L_AVX10, "convF2L_(reg_reg|reg_mem)_avx10");
+        machOnlyNameRegex(X86_SCONV_F2L_AVX10_2, "convF2L_(reg_reg|reg_mem)_avx10_2");
     }
 
     public static final String X86_VCAST_F2X = PREFIX + "X86_VCAST_F2X" + POSTFIX;
@@ -2699,14 +2709,14 @@ public class IRNode {
         machOnlyNameRegex(X86_VCAST_D2X, "castDtoX_reg_(av|eve)x");
     }
 
-    public static final String X86_VCAST_F2X_AVX10 = PREFIX + "X86_VCAST_F2X_AVX10" + POSTFIX;
+    public static final String X86_VCAST_F2X_AVX10_2 = PREFIX + "X86_VCAST_F2X_AVX10_2" + POSTFIX;
     static {
-        machOnlyNameRegex(X86_VCAST_F2X_AVX10, "castFtoX_(reg|mem)_avx10");
+        machOnlyNameRegex(X86_VCAST_F2X_AVX10_2, "castFtoX_(reg|mem)_avx10_2");
     }
 
-    public static final String X86_VCAST_D2X_AVX10 = PREFIX + "X86_VCAST_D2X_AVX10" + POSTFIX;
+    public static final String X86_VCAST_D2X_AVX10_2 = PREFIX + "X86_VCAST_D2X_AVX10_2" + POSTFIX;
     static {
-        machOnlyNameRegex(X86_VCAST_D2X_AVX10, "castDtoX_(reg|mem)_avx10");
+        machOnlyNameRegex(X86_VCAST_D2X_AVX10_2, "castDtoX_(reg|mem)_avx10_2");
     }
 
     public static final String XOR = PREFIX + "XOR" + POSTFIX;
@@ -2742,6 +2752,11 @@ public class IRNode {
     public static final String XOR_VL = VECTOR_PREFIX + "XOR_VL" + POSTFIX;
     static {
         vectorNode(XOR_VL, "XorV", TYPE_LONG);
+    }
+
+    public static final String XOR_V = PREFIX + "XOR_V" + POSTFIX;
+    static {
+        beforeMatchingNameRegex(XOR_V, "XorV");
     }
 
     public static final String XOR_V_MASK = PREFIX + "XOR_V_MASK" + POSTFIX;
@@ -2903,6 +2918,12 @@ public class IRNode {
     static {
         String regex = START + "ModD" + MID + END;
         macroNodes(MOD_D, regex);
+    }
+
+    public static final String POW_D = PREFIX + "POW_D" + POSTFIX;
+    static {
+        String regex = START + "PowD" + MID + END;
+        macroNodes(POW_D, regex);
     }
 
     public static final String BLACKHOLE = PREFIX + "BLACKHOLE" + POSTFIX;
