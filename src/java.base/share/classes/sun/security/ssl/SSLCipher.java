@@ -619,14 +619,14 @@ enum SSLCipher {
          * If key usage limits are not be monitored, return false.
          */
         public boolean atKeyLimit() {
-            if (keyLimitCountdown < COUNTDOWNWARN && SSLLogger.isOn()) {
+            if (keyLimitCountdown < COUNTDOWNWARN && SSLLogger.isOn) {
                 SSLLogger.fine("keyLimitCountdown: " + keyLimitCountdown);
             }
             if (keyLimitCountdown >= 0) {
                 return false;
             }
             if (keyLimitEnabled == false) {
-                if (SSLLogger.isOn()) {
+                if (SSLLogger.isOn) {
                     SSLLogger.fine("KeyUpdate already sent, skipping");
                 }
                 return false;
