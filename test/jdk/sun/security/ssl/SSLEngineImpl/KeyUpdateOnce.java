@@ -122,8 +122,9 @@ public class KeyUpdateOnce extends SSLContextTemplate {
             System.out.println("test.java.opts: " +
                 System.getProperty("test.java.opts"));
 
-            ProcessBuilder pb = ProcessTools.createTestJavaProcessBuilder("KeyUpdateOnce", "p", args[0],
-                    args[1], args[2]);
+            ProcessBuilder pb = ProcessTools.createTestJavaProcessBuilder(
+                Utils.addTestJavaOpts("KeyUpdateOnce", "p", args[0],
+                    args[1], args[2]));
 
             OutputAnalyzer output = ProcessTools.executeProcess(pb);
             try {
