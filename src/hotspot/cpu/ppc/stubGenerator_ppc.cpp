@@ -3584,7 +3584,7 @@ class StubGenerator: public StubCodeGenerator {
   address generate_updateBytesAdler32() {
 
     __ align(CodeEntryAlignment);
-    StubId stub_id = StubId::stubgen_updateBytesAdler32_id;
+    StubGenStubId stub_id = StubGenStubId::updateBytesAdler32_id;
     StubCodeMark mark(this, stub_id);
     address start = __ function_entry();
 
