@@ -405,9 +405,12 @@ public class ArrayTypeConvertTest extends VectorizationTestRunner {
     @IR(applyIfCPUFeatureOr = {"sve", "true", "avx", "true", "rvv", "true"},
         applyIf = {"MaxVectorSize", ">=32"},
         counts = {IRNode.VECTOR_CAST_D2S, IRNode.VECTOR_SIZE + "min(max_double, max_short)", "> 0"})
-    @IR(applyIfCPUFeatureOr = {"sve", "true", "avx", "true", "avx10_2", "true"},
+    @IR(applyIfCPUFeatureOr = {"avx", "true", "avx10_2", "true"},
         applyIf = {"MaxVectorSize", ">=16"},
         counts = {IRNode.VECTOR_CAST_D2S, IRNode.VECTOR_SIZE + "min(max_double, max_short)", "> 0"})
+    @IR(applyIfCPUFeature = {"sve", "true"},
+        applyIf = {"MaxVectorSize", "< 32"},
+        failOn = {IRNode.VECTOR_CAST_D2S})
     @IR(counts = {IRNode.X86_VCAST_D2X, "> 0"},
         applyIf = {"MaxVectorSize", ">=16"},
         applyIfCPUFeatureAnd = {"avx", "true", "avx10_2", "false"})
@@ -426,9 +429,12 @@ public class ArrayTypeConvertTest extends VectorizationTestRunner {
     @IR(applyIfCPUFeatureOr = {"sve", "true", "avx", "true", "rvv", "true"},
         applyIf = {"MaxVectorSize", ">= 32"},
         counts = {IRNode.VECTOR_CAST_D2S, IRNode.VECTOR_SIZE + "min(max_double, max_char)", "> 0"})
-    @IR(applyIfCPUFeatureOr = {"sve", "true", "avx", "true", "avx10_2", "true"},
+    @IR(applyIfCPUFeatureOr = {"avx", "true", "avx10_2", "true"},
         applyIf = {"MaxVectorSize", ">= 16"},
         counts = {IRNode.VECTOR_CAST_D2S, IRNode.VECTOR_SIZE + "min(max_double, max_char)", "> 0"})
+    @IR(applyIfCPUFeature = {"sve", "true"},
+        applyIf = {"MaxVectorSize", "< 32"},
+        failOn = {IRNode.VECTOR_CAST_D2S})
     @IR(counts = {IRNode.X86_VCAST_D2X, "> 0"},
         applyIf = {"MaxVectorSize", ">=16"},
         applyIfCPUFeatureAnd = {"avx", "true", "avx10_2", "false"})
