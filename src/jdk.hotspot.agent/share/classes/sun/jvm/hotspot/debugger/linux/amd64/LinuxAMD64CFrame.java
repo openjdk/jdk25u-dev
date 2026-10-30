@@ -95,13 +95,21 @@ public final class LinuxAMD64CFrame extends BasicCFrame {
      }
    }
 
-   private boolean isValidFrame(Address nextCFA, ThreadContext context) {
+   private boolean isValidFrame(Address nextCFA, ThreadContext context, boolean isNative) {
+     // When unwinding from one native frame to the next, the CFA must strictly
+     // advance up the stack; a non-advancing CFA means the walk is stuck and must
+     // terminate (e.g. glibc 2.44's rbp-based CFA in __syscall_cancel). At a
+     // native/code-cache boundary the next CFA may legitimately equal the current
+     // one (e.g. a void FFM downcall stub that allocates no frame), so the strict
+     // check is only applied between native frames.
      return (nextCFA != null) &&
-             !nextCFA.lessThan(context.getRegisterAsAddress(AMD64ThreadContext.RSP));
+             !nextCFA.lessThan(context.getRegisterAsAddress(AMD64ThreadContext.RSP)) &&
+             (!isNative || (cfa == null) || nextCFA.greaterThan(cfa));
    }
 
    private Address getNextCFA(DwarfParser nextDwarf, ThreadContext context) {
      Address nextCFA;
+     boolean isNative = false;
 
      if (nextDwarf == null) { // Next frame is Java
        nextCFA = (dwarf == null) ? cfa.getAddressAt(0) // Current frame is Java (Use RBP)
@@ -110,6 +118,7 @@ public final class LinuxAMD64CFrame extends BasicCFrame {
        if (dwarf == null) { // Current frame is Java (Use RBP)
          nextCFA = cfa.getAddressAt(0);
        } else { // Current frame is Native
+         isNative = true;
          int nextCFAReg = nextDwarf.getCFARegister();
          if (!dwarf.isBPOffsetAvailable() && // Use RBP as CFA
              (nextCFAReg == AMD64ThreadContext.RBP) &&
@@ -128,7 +137,7 @@ public final class LinuxAMD64CFrame extends BasicCFrame {
        }
      }
 
-     return isValidFrame(nextCFA, context) ? nextCFA : null;
+     return isValidFrame(nextCFA, context, isNative) ? nextCFA : null;
    }
 
    @Override
@@ -171,8 +180,9 @@ public final class LinuxAMD64CFrame extends BasicCFrame {
      }
 
      Address nextCFA = getNextCFA(nextDwarf, context);
-     return isValidFrame(nextCFA, context) ? new LinuxAMD64CFrame(dbg, nextCFA, nextPC, nextDwarf)
-                                           : null;
+     // getNextCFA already applies isValidFrame and returns null when invalid.
+     return (nextCFA != null) ? new LinuxAMD64CFrame(dbg, nextCFA, nextPC, nextDwarf)
+                              : null;
    }
 
    // package/class internals only
