@@ -29,7 +29,7 @@
 
 /* @test
  * @requires (os.family != "windows")
- * @run junit/othervm -Djava.nio.channels.spi.SelectorProvider=sun.nio.ch.PollSelectorProvider UpdateReadyOps
+ * @run testng/othervm -Djava.nio.channels.spi.SelectorProvider=sun.nio.ch.PollSelectorProvider UpdateReadyOps
  */
 
 import java.io.Closeable;
