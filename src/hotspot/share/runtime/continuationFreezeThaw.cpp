@@ -155,8 +155,6 @@ Address |   |                            |    |   Caller is still in the chunk.
 
 ************************************************/
 
-static const bool TEST_THAW_ONE_CHUNK_FRAME = false; // force thawing frames one-at-a-time for testing
-
 #define CONT_JFR false // emit low-level JFR events that count slow/fast path for continuation performance debugging only
 #if CONT_JFR
   #define CONT_JFR_ONLY(code) code
@@ -1937,6 +1935,7 @@ protected:
   void clear_chunk(stackChunkOop chunk);
   template<bool check_stub>
   int remove_top_compiled_frame_from_chunk(stackChunkOop chunk, int &argsize);
+  void check_top_for_deoptimization(stackChunkOop chunk);
   void copy_from_chunk(intptr_t* from, intptr_t* to, int size);
 
   void thaw_lockstack(stackChunkOop chunk);
@@ -2045,6 +2044,23 @@ public:
 inline void ThawBase::clear_chunk(stackChunkOop chunk) {
   chunk->set_sp(chunk->bottom());
   chunk->set_max_thawing_size(0);
+}
+
+void ThawBase::check_top_for_deoptimization(stackChunkOop chunk) {
+  StackChunkFrameStream<ChunkFrames::CompiledOnly> f(chunk);
+  if (f.is_stub()) {
+    f.next(SmallRegisterMap::instance(), true /* stop */);
+    assert(!f.is_done(), "");
+
+    f.get_cb();
+    assert(f.is_compiled(), "");
+    if (f.cb()->as_nmethod()->is_marked_for_deoptimization()) {
+      // The caller of the runtime stub when the continuation is preempted is not at a
+      // Java call instruction, and so cannot rely on nmethod patching for deopt.
+      log_develop_trace(continuations)("Deoptimizing runtime stub caller");
+      f.to_frame().deoptimize(nullptr); // the null thread simply avoids the assertion in deoptimize which we're not set up for
+    }
+  }
 }
 
 template<bool check_stub>
@@ -2160,9 +2176,12 @@ NOINLINE intptr_t* Thaw<ConfigT>::thaw_fast(stackChunkOop chunk) {
   intptr_t* const chunk_sp = chunk->start_address() + chunk->sp();
 
   bool partial, empty;
-  if (LIKELY(!TEST_THAW_ONE_CHUNK_FRAME && (full_chunk_size < threshold))) {
+  if (LIKELY(!ForceSingleFrameThaw && (full_chunk_size < threshold))) {
     prefetch_chunk_pd(chunk->start_address(), full_chunk_size); // prefetch anticipating memcpy starting at highest address
 
+    if (check_stub) {
+      check_top_for_deoptimization(chunk);
+    }
     partial = false;
     argsize = chunk->argsize(); // must be called *before* clearing the chunk
     clear_chunk(chunk);
