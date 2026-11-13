@@ -157,8 +157,6 @@ void ShenandoahBarrierSet::on_thread_attach(Thread *thread) {
 }
 
 void ShenandoahBarrierSet::on_thread_detach(Thread *thread) {
-  SATBMarkQueue& queue = ShenandoahThreadLocalData::satb_mark_queue(thread);
-  _satb_mark_queue_set.flush_queue(queue);
   if (thread->is_Java_thread()) {
     PLAB* gclab = ShenandoahThreadLocalData::gclab(thread);
     if (gclab != nullptr) {
@@ -180,6 +178,10 @@ void ShenandoahBarrierSet::on_thread_detach(Thread *thread) {
       StackWatermarkSet::finish_processing(JavaThread::cast(thread), &oops, StackWatermarkKind::gc);
     }
   }
+
+  // Flush after processing everything, to catch stray SATB additions.
+  SATBMarkQueue& queue = ShenandoahThreadLocalData::satb_mark_queue(thread);
+  _satb_mark_queue_set.flush_queue(queue);
 }
 
 void ShenandoahBarrierSet::clone_barrier_runtime(oop src) {
