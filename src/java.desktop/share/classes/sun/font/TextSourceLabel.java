@@ -163,7 +163,7 @@ public class TextSourceLabel extends TextLabel {
     int start = source.getStart();
     int length = source.getLength();
 
-    GlyphLayout gl = GlyphLayout.get(null); // !!! no custom layout engines
+    GlyphLayout gl = GlyphLayout.get(); // !!! no custom layout engines
     StandardGlyphVector gv = gl.layout(font, frc, context, start, length,
                                        flags, null); // ??? use textsource
     GlyphLayout.done(gl);
