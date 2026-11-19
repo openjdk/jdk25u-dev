@@ -486,9 +486,7 @@ abstract class HttpConnection implements Closeable {
      * Closes this connection due to the given cause.
      * @param cause the cause for which the connection is closed, may be null
      */
-    void close(Throwable cause) {
-        close();
-    }
+    abstract void close(Throwable cause);
 
     abstract FlowTube getConnectionFlow();
 
