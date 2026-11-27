@@ -4670,14 +4670,14 @@ static WCHAR* get_path_to_target(const wchar_t* wide_path) {
     errno = ::GetLastError();
     log_debug(os)("get_path_to_target() failed to GetFinalPathNameByHandleW: GetLastError->%ld.", errno);
     ::CloseHandle(hFile);
-    FREE_C_HEAP_ARRAY(path_to_target);
+    FREE_C_HEAP_ARRAY(WCHAR, path_to_target);
     return nullptr;
   }
 
   if (::CloseHandle(hFile) == 0) {
     errno = ::GetLastError();
     log_debug(os)("get_path_to_target() failed to CloseHandle: GetLastError->%ld.", errno);
-    FREE_C_HEAP_ARRAY(path_to_target);
+    FREE_C_HEAP_ARRAY(WCHAR, path_to_target);
     return nullptr;
   }
 
