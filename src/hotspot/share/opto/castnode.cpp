@@ -496,6 +496,29 @@ Node* ConstraintCastNode::make_cast_for_type(Node* c, Node* in, const Type* type
   return nullptr;
 }
 
+ConstraintCastNode* ConstraintCastNode::pin_under_control() const {
+  assert(depends_only_on_test(), "must be a floating cast");
+  Node* res = nullptr;
+  switch (Opcode()) {
+    case Op_CastII:
+      // Special case: do not miss range_check_dependency
+      res = new CastIINode(in(0), in(1), bottom_type(), StrongDependency, as_CastII()->has_range_check(), _extra_types);
+      break;
+    case Op_CheckCastPP:
+      // Special case: do not convert CheckCastPP -> CastPP
+      res = new CheckCastPPNode(in(0), in(1), bottom_type(), StrongDependency, _extra_types);
+      break;
+    default: {
+      // Generic case: handle everything else normally
+      res = make_cast_for_type(in(0), in(1), bottom_type(), StrongDependency, _extra_types);
+      break;
+    }
+  }
+  assert(res->Opcode() == Opcode(), "Must be the same class: %s -> %s", Name(), res->Name());
+  assert(!res->depends_only_on_test(), "Must be pinned");
+  return res->as_ConstraintCast();
+}
+
 Node* ConstraintCastNode::optimize_integer_cast(PhaseGVN* phase, BasicType bt) {
   PhaseIterGVN *igvn = phase->is_IterGVN();
   const TypeInteger* this_type = this->type()->is_integer(bt);

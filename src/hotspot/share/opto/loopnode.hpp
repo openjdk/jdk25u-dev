@@ -1825,8 +1825,6 @@ public:
 
   bool can_move_to_inner_loop(Node* n, LoopNode* n_loop, Node* x);
 
-  void pin_array_access_nodes_dependent_on(Node* ctrl);
-
   Node* ensure_node_and_inputs_are_above_pre_end(CountedLoopEndNode* pre_end, Node* node);
 
   ConINode* intcon(jint i);
