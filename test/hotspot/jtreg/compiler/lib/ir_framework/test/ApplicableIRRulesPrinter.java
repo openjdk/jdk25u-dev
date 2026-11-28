@@ -106,6 +106,8 @@ public class ApplicableIRRulesPrinter {
         "avx512_fp16",
         "avx512_vnni",
         "avx10_2",
+        // Intel APX
+        "apx_f",
         // AArch64
         "sha3",
         "asimd",
